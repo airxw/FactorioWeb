@@ -66,6 +66,7 @@ composer install
 ```
 
 ### 3. 配置服务器
+这个可以不用做，直接在web中进行设置即可。
 
 1. 复制配置文件示例并根据需要修改：
 
@@ -83,7 +84,7 @@ cp setting/map-settings.example.json setting/map-settings.json
 2. 编辑配置文件，根据你的服务器环境进行调整。
 
 ### 4. 启动 Web 服务器
-
+这个也可以不用做，直接在web中进行设置即可。
 项目使用 Workerman 作为 WebSocket 服务器，你可以通过以下命令启动：
 
 ```bash
@@ -93,6 +94,7 @@ php websocket_server.php start
 ```
 
 ### 5. 配置 Web 服务器
+建议新手使用宝塔直接梭哈，配置好后直接在宝塔中启动项目即可。如果使用宝塔梭哈，请不用看一下内容。
 
 你需要配置一个 Web 服务器（如 Apache 或 Nginx）来托管 Web 界面。以下是 Nginx 配置示例：
 
@@ -151,7 +153,7 @@ server {
 ### WebSocket 连接失败
 
 1. 确保 Workerman WebSocket 服务器正在运行
-2. 检查防火墙设置，确保 WebSocket 端口（默认为 8080）已开放
+2. 检查防火墙设置，确保 WebSocket 端口（默认为 8080）已开放（内网转发，其实这个也无所谓）
 3. 检查前端配置中的 WebSocket 连接地址是否正确
 
 ### 配置文件编辑后不生效
@@ -171,3 +173,4 @@ server {
 ## 联系方式
 
 - GitHub: [https://github.com/airxw/FactorioWeb](https://github.com/airxw/FactorioWeb)
+![alt text](image.png)
