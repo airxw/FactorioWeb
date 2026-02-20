@@ -94,7 +94,7 @@ php websocket_server.php start
 ```
 
 ### 5. 配置 Web 服务器
-建议新手使用宝塔直接梭哈，配置好后直接在宝塔中启动项目即可。如果使用宝塔梭哈，请不用看一下内容。
+建议新手使用宝塔直接梭哈，配置好后直接在宝塔中启动项目即可。如果使用宝塔梭哈，请不用看以下内容。
 
 你需要配置一个 Web 服务器（如 Apache 或 Nginx）来托管 Web 界面。以下是 Nginx 配置示例：
 
@@ -162,6 +162,10 @@ server {
 2. 重启 Factorio 服务器以应用新的配置
 3. 检查配置文件格式是否正确（JSON 格式）
 
+### 项目效果
+https://github.com/airxw/FactorioWeb/blob/main/image.png
+默认用户admin
+默认密码password
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request 来改进这个项目。
