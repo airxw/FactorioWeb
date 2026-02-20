@@ -123,15 +123,12 @@ cp setting/map-settings.example.json setting/map-settings.json
 
 #### 使用宝塔面板（推荐）
 
-<<<<<<< HEAD
 1. 在宝塔面板中创建一个网站
 2. 网站根目录设置为 `FactorioWeb/web`
 3. 配置 PHP 版本为 7.4 或更高
 4. 启动网站
-=======
-### 5. 配置 Web 服务器
+
 建议新手使用宝塔直接梭哈，配置好后直接在宝塔中启动项目即可。如果使用宝塔梭哈，请不用看以下内容。
->>>>>>> 4709173d3d928a8055b6114a2efbd6f92f40bc22
 
 #### 手动配置 Nginx
 
@@ -370,7 +367,6 @@ https://github.com/airxw/FactorioWeb/blob/main/image.png
 
 ## 联系方式
 
-<<<<<<< HEAD
 - **GitHub**：[https://github.com/airxw/FactorioWeb](https://github.com/airxw/FactorioWeb)
 - **QQ群**：1137842268
 
@@ -395,7 +391,3 @@ https://github.com/airxw/FactorioWeb/blob/main/image.png
 ---
 
 感谢使用 FactorioWeb！如果您有任何问题或建议，欢迎在 GitHub 上提交 Issue 或加入 QQ 群讨论。
-=======
-- GitHub: [https://github.com/airxw/FactorioWeb](https://github.com/airxw/FactorioWeb)
-![alt text](image.png)
->>>>>>> 4709173d3d928a8055b6114a2efbd6f92f40bc22
