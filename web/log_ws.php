@@ -7,13 +7,8 @@ header('X-Accel-Buffering: no');
 ignore_user_abort(true);
 set_time_limit(0);
 
-// 使用 Linux 风格的日志文件路径
-$logFile = '/www/wwwroot/factorio/factorio-current.log';
-
-// 确保路径存在，不存在则使用相对路径
-if (!file_exists($logFile)) {
-    $logFile = __DIR__ . '/../factorio-current.log';
-}
+// 使用相对路径
+$logFile = __DIR__ . '/../factorio-current.log';
 
 if (!file_exists($logFile)) {
     echo "data: [INFO] 等待日志文件生成...\n\n\n";
