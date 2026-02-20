@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factorio Server Pro - 登录</title>
+    <link rel="stylesheet" href="static/lib/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="static/lib/bootstrap/bootstrap-icons.css">
+    <link id="skin-style" rel="stylesheet" href="">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --bg-gradient: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
+            --login-card-bg: rgba(255, 255, 255, 0.95);
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --input-border: #e5e7eb;
+            --input-bg: #ffffff;
+            --input-label: #9ca3af;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            height: 100%;
+            font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+            background: var(--bg-gradient);
+        }
+        
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-card {
+            background: var(--login-card-bg);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 420px;
+            padding: 40px;
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .login-header i {
+            font-size: 48px;
+            color: var(--primary);
+            margin-bottom: 16px;
+        }
+        
+        .login-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        
+        .login-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .form-floating {
+            margin-bottom: 20px;
+        }
+        
+        .form-floating > .form-control {
+            border-radius: 10px;
+            border: 2px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text-primary);
+            padding: 20px 16px;
+            height: auto;
+            transition: all 0.3s ease;
+        }
+        
+        .form-floating > .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        }
+        
+        .form-floating > label {
+            padding: 20px 16px;
+            color: var(--input-label);
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            background: var(--primary);
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-login:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .btn-login:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+        }
+        
+        .footer-text {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        
+        @media (max-width: 576px) {
+            .login-card {
+                padding: 32px 24px;
+            }
+            
+            .login-header h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <i class="bi bi-hdd-rack-fill"></i>
+                <h1>Factorio Server Pro</h1>
+                <p>工业自动化管理面板</p>
+            </div>
+            
+            <div id="alert-container"></div>
+            
+            <form id="loginForm">
+                <div class="form-floating">
+                    <input type="text" class="form-control" id="username" placeholder="用户名" autocomplete="username" required>
+                    <label for="username"><i class="bi bi-person me-2"></i>用户名</label>
+                </div>
+                
+                <div class="form-floating">
+                    <input type="password" class="form-control" id="password" placeholder="密码" autocomplete="current-password" required>
+                    <label for="password"><i class="bi bi-lock me-2"></i>密码</label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-login" id="loginBtn">
+                    <span id="btnText">登录</span>
+                    <span id="btnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                </button>
+            </form>
+            
+            <div class="footer-text">
+                <p class="mb-2"><i class="bi bi-shield-lock"></i> 安全登录 · 版本 v2.0</p>
+                <div class="d-flex justify-content-center gap-2 mb-2 flex-wrap">
+                    <button class="btn btn-sm btn-link p-0 text-decoration-none" onclick="setSkin('default')" title="默认风格">
+                        <i class="bi bi-sun"></i> 默认
+                    </button>
+                    <span class="text-muted">|</span>
+                    <button class="btn btn-sm btn-link p-0 text-decoration-none" onclick="setSkin('industrial')" title="现代风格">
+                        <i class="bi bi-palette"></i> 现代
+                    </button>
+                    <span class="text-muted">|</span>
+                    <button class="btn btn-sm btn-link p-0 text-decoration-none" onclick="setSkin('factorio')" title="Factorio风格">
+                        <i class="bi bi-gear"></i> Factorio
+                    </button>
+                </div>
+                <a href="password-tool.html" class="text-decoration-none">
+                    <i class="bi bi-key me-1"></i>设置/修改密码
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/lib/jquery-3.6.0.min.js"></script>
+    <script src="static/lib/bootstrap/js/bootstrap.bundle.js"></script>
+    <script>
+        function setSkin(skin) {
+            const skinLink = document.getElementById('skin-style');
+            if (skin === 'industrial') {
+                skinLink.href = 'static/skins/industrial.css';
+                localStorage.setItem('factorio-skin', 'industrial');
+            } else if (skin === 'factorio') {
+                skinLink.href = 'static/skins/factorio.css';
+                localStorage.setItem('factorio-skin', 'factorio');
+            } else {
+                skinLink.href = '';
+                localStorage.setItem('factorio-skin', 'default');
+            }
+        }
+
+        function loadSkin() {
+            const savedSkin = localStorage.getItem('factorio-skin');
+            if (savedSkin) {
+                setSkin(savedSkin);
+            }
+        }
+
+        loadSkin();
+        function showAlert(message, type = 'danger') {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                <i class="bi bi-${type === 'danger' ? 'exclamation-triangle' : 'check-circle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            container.innerHTML = '';
+            container.appendChild(alert);
+        }
+        
+        function setLoading(loading) {
+            const btn = document.getElementById('loginBtn');
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            
+            btn.disabled = loading;
+            btnText.textContent = loading ? '登录中...' : '登录';
+            btnSpinner.classList.toggle('d-none', !loading);
+        }
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showAlert('请填写用户名和密码');
+                return;
+            }
+            
+            setLoading(true);
+            
+            try {
+                const fd = new FormData();
+                fd.append('username', username);
+                fd.append('password', password);
+                fd.append('action', 'login');
+                
+                const res = await fetch('api.php', {
+                    method: 'POST',
+                    body: fd
+                });
+                
+                const d = await res.json();
+                
+                if (d.error) {
+                    showAlert(d.error);
+                } else if (d.success) {
+                    showAlert('登录成功，正在跳转...', 'success');
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 800);
+                }
+            } catch (e) {
+                showAlert('网络错误，请稍后重试');
+                console.error(e);
+            } finally {
+                setLoading(false);
+            }
+        });
+        
+        document.getElementById('password').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
