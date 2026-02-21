@@ -645,6 +645,28 @@
 
 <div id="toast-container"></div>
 
+<!-- 进度条 Modal -->
+<div class="modal fade" id="progressModal" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="progressModalLabel">操作进度</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="progressModalClose" disabled></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2" id="progressMessage">准备中...</div>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="progressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div class="mt-2 text-end text-muted" id="progressDetails"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="progressModalCancel" disabled>取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Mod 门户 Modal -->
 <div class="modal fade" id="modPortalModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header bg-dark text-white"><h5 class="modal-title">Mod 门户</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="input-group mb-3"><span class="input-group-text">授权</span><input type="text" id="factorio-user" class="form-control" placeholder="用户名"><input type="password" id="factorio-token" class="form-control" placeholder="Token"></div><div class="input-group mb-3"><input type="text" id="portal-search" class="form-control" placeholder="输入 Mod 名字..." onkeydown="if(event.keyCode==13) searchModPortal()"><button class="btn btn-dark" onclick="searchModPortal()">搜索</button></div><div id="portal-results" class="list-group"></div></div></div></div></div>
 
@@ -1061,30 +1083,108 @@ async function refreshMapList() {
     });
 }
 
+// 进度条控制函数
+function showProgressModal(message) {
+    document.getElementById('progressMessage').textContent = message;
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressBar').ariaValueNow = 0;
+    document.getElementById('progressDetails').textContent = '';
+    document.getElementById('progressModalClose').disabled = true;
+    document.getElementById('progressModalCancel').disabled = true;
+    
+    const modal = new bootstrap.Modal(document.getElementById('progressModal'));
+    modal.show();
+}
+
+function updateProgress(percent, details) {
+    document.getElementById('progressBar').style.width = percent + '%';
+    document.getElementById('progressBar').ariaValueNow = percent;
+    if (details) {
+        document.getElementById('progressDetails').textContent = details;
+    }
+}
+
+function hideProgressModal() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('progressModal'));
+    if (modal) {
+        modal.hide();
+    }
+}
+
 // 一键切换存档（回档）
 async function useThisSave(name, sizeMB) {
     if (!confirm(`确认切换到存档：${name}？\n\n存档大小：${sizeMB} MB\n复制可能需要一些时间，请耐心等待。`)) {
         return;
     }
     
+    showProgressModal('正在切换存档...');
+    
+    // 使用 SSE 接收实时进度
     const fd = new FormData();
     fd.append('filename', name);
+    fd.append('realtime', 'true');
     
     try {
-        showToast('正在切换存档，请稍候...', 'info');
+        const url = 'api.php?action=set_current_save';
+        const response = await fetch(url, {
+            method: 'POST',
+            body: fd
+        });
         
-        const r = await fetch('api.php?action=set_current_save', { method: 'POST', body: fd });
-        const d = await r.json();
-        
-        if (d.error) {
-            showToast(d.error, 'error');
-            return;
+        if (!response.ok) {
+            throw new Error('网络错误');
         }
         
-        showToast(d.message || '存档切换成功！', 'success');
-        refreshMapList();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            
+            // 处理接收到的数据
+            const lines = buffer.split('\n');
+            for (let i = 0; i < lines.length - 1; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith('event: progress')) {
+                    const dataLine = lines[i + 1];
+                    if (dataLine.startsWith('data: ')) {
+                        const data = JSON.parse(dataLine.substring(6));
+                        updateProgress(data.progress, `复制中... ${data.progress.toFixed(1)}%`);
+                    }
+                } else if (line.startsWith('event: complete')) {
+                    const dataLine = lines[i + 1];
+                    if (dataLine.startsWith('data: ')) {
+                        const data = JSON.parse(dataLine.substring(6));
+                        if (data.status === 'success') {
+                            showToast(data.message || '存档切换成功！', 'success');
+                            refreshMapList();
+                        } else {
+                            showToast(data.error || '切换失败', 'error');
+                        }
+                        hideProgressModal();
+                        return;
+                    }
+                } else if (line.startsWith('event: error')) {
+                    const dataLine = lines[i + 1];
+                    if (dataLine.startsWith('data: ')) {
+                        const data = JSON.parse(dataLine.substring(6));
+                        showToast(data.error || '切换失败', 'error');
+                        hideProgressModal();
+                        return;
+                    }
+                }
+            }
+            
+            // 保留未处理的部分
+            buffer = lines[lines.length - 1];
+        }
     } catch (e) {
         showToast('切换存档失败：' + (e.message || '未知错误'), 'error');
+        hideProgressModal();
     }
 }
     async function refreshConfigList() { loadDropdown('config', 'config-select'); }

@@ -68,6 +68,54 @@ function setCurrentSaveName($filename) {
     setState('current_save', $filename);
 }
 
+function copyWithProgress($src, $dst, &$progress, $progressFile = null) {
+    $bufferSize = 8192; // 8KB buffer
+    $totalSize = filesize($src);
+    $copied = 0;
+    
+    $srcHandle = fopen($src, 'rb');
+    $dstHandle = fopen($dst, 'wb');
+    
+    if (!$srcHandle || !$dstHandle) {
+        return false;
+    }
+    
+    while (!feof($srcHandle)) {
+        $chunk = fread($srcHandle, $bufferSize);
+        $bytesWritten = fwrite($dstHandle, $chunk);
+        
+        if ($bytesWritten === false) {
+            fclose($srcHandle);
+            fclose($dstHandle);
+            return false;
+        }
+        
+        $copied += $bytesWritten;
+        $progress = round(($copied / $totalSize) * 100, 2);
+        
+        // 更新进度文件
+        if ($progressFile) {
+            file_put_contents($progressFile, $progress);
+        }
+        
+        // 每100KB更新一次进度（减少计算开销）
+        if ($copied % 102400 === 0) {
+            usleep(1000); // 短暂休眠，避免CPU占用过高
+        }
+    }
+    
+    fclose($srcHandle);
+    fclose($dstHandle);
+    $progress = 100;
+    
+    // 最终进度更新
+    if ($progressFile) {
+        file_put_contents($progressFile, $progress);
+    }
+    
+    return true;
+}
+
 switch ($action) {
     case 'login':               handleLogin(); break;
     case 'logout':              handleLogout(); break;
@@ -209,18 +257,86 @@ function handleSetCurrentSave() {
         @unlink($dst);
     }
     
-    if (copy($src, $dst)) {
-        chmod($dst, 0644);
-        setCurrentSaveName($file);
-        echo json_encode([
-            'message' => "已切换到存档：$file",
-            'filename' => $file,
-            'size' => $sizeMB,
-            'copied' => true
-        ]);
+    // 检查是否需要实时进度
+    $realtime = isset($_POST['realtime']) && $_POST['realtime'] === 'true';
+    
+    if ($realtime) {
+        // 使用分块传输编码
+        header('Content-Type: text/event-stream');
+        header('Cache-Control: no-cache');
+        header('Connection: keep-alive');
+        
+        $progressFile = "$GLOBALS[saveDir]/.progress_" . uniqid() . ".tmp";
+        file_put_contents($progressFile, '0');
+        
+        // 启动异步复制
+        $pid = pcntl_fork();
+        if ($pid == -1) {
+            echo "event: error\ndata: {\"error\":\"无法启动复制进程\"}\n\n";
+            exit;
+        } elseif ($pid == 0) {
+            // 子进程
+            $progress = 0;
+            if (copyWithProgress($src, $dst, $progress, $progressFile)) {
+                chmod($dst, 0644);
+                setCurrentSaveName($file);
+                file_put_contents($progressFile, json_encode([
+                    'status' => 'success',
+                    'progress' => 100,
+                    'message' => "已切换到存档：$file",
+                    'filename' => $file,
+                    'size' => $sizeMB
+                ]));
+            } else {
+                $error = error_get_last();
+                file_put_contents($progressFile, json_encode([
+                    'status' => 'error',
+                    'error' => '切换失败：' . ($error['message'] ?? '未知错误')
+                ]));
+            }
+            exit;
+        } else {
+            // 父进程
+            while (true) {
+                usleep(500000); // 每500ms检查一次
+                
+                if (!file_exists($progressFile)) {
+                    break;
+                }
+                
+                $content = file_get_contents($progressFile);
+                if (strpos($content, '{') === 0) {
+                    // 完成
+                    $data = json_decode($content, true);
+                    echo "event: complete\ndata: " . json_encode($data) . "\n\n";
+                    flush();
+                    @unlink($progressFile);
+                    break;
+                } else {
+                    // 进度更新
+                    $progress = (float)$content;
+                    echo "event: progress\ndata: {\"progress\":$progress,\"file\":\"$file\",\"size\":$sizeMB}\n\n";
+                    flush();
+                }
+            }
+        }
     } else {
-        $error = error_get_last();
-        echo json_encode(['error' => '切换失败：' . ($error['message'] ?? '未知错误')]);
+        // 传统方式
+        $progress = 0;
+        if (copyWithProgress($src, $dst, $progress)) {
+            chmod($dst, 0644);
+            setCurrentSaveName($file);
+            echo json_encode([
+                'message' => "已切换到存档：$file",
+                'filename' => $file,
+                'size' => $sizeMB,
+                'copied' => true,
+                'progress' => 100
+            ]);
+        } else {
+            $error = error_get_last();
+            echo json_encode(['error' => '切换失败：' . ($error['message'] ?? '未知错误')]);
+        }
     }
 }
 
