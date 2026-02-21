@@ -196,8 +196,8 @@ function handleStart() {
         $bin = $GLOBALS['binPath'];
     } else {
         $possiblePaths = [
-            "$GLOBALS[versionsDir]/$ver/factorio/bin/x64/factorio",
-            "$GLOBALS[versionsDir]/$ver/bin/x64/factorio"
+            "{$GLOBALS['versionsDir']}/$ver/factorio/bin/x64/factorio",
+            "{$GLOBALS['versionsDir']}/$ver/bin/x64/factorio"
         ];
         $bin = null;
         foreach ($possiblePaths as $path) {
@@ -211,7 +211,7 @@ function handleStart() {
         echo json_encode(['error' => '服务端版本不存在']);
         exit;
     }
-    $currentSave = "$GLOBALS[saveDir]/current.zip";
+    $currentSave = "{$GLOBALS['saveDir']}/current.zip";
     if (!file_exists($currentSave)) {
         echo json_encode(['error' => '当前存档 current.zip 不存在，请先选择一个存档']);
         exit;
@@ -221,7 +221,7 @@ function handleStart() {
         escapeshellarg($GLOBALS['serverRoot']),
         escapeshellarg($bin),
         escapeshellarg($currentSave),
-        escapeshellarg("$GLOBALS[configDir]/$cfg"),
+        escapeshellarg("{$GLOBALS['configDir']}/$cfg"),
         escapeshellarg($GLOBALS['modDir']),
         escapeshellarg($GLOBALS['logFile'])
     );
@@ -235,13 +235,13 @@ function handleSetCurrentSave() {
         echo json_encode(['error' => '无效文件名']);
         exit;
     }
-    $src = "$GLOBALS[saveDir]/$file";
-    $dst = "$GLOBALS[saveDir]/current.zip";
+    $src = "{$GLOBALS['saveDir']}/$file";
+    $dst = "{$GLOBALS['saveDir']}/current.zip";
     if (!file_exists($src)) {
         echo json_encode(['error' => '存档文件不存在']);
         exit;
     }
-    if (!is_writable($GLOBALS[saveDir])) {
+    if (!is_writable($GLOBALS['saveDir'])) {
         echo json_encode(['error' => '目录不可写，请检查权限']);
         exit;
     }
@@ -266,7 +266,7 @@ function handleSetCurrentSave() {
         header('Cache-Control: no-cache');
         header('Connection: keep-alive');
         
-        $progressFile = "$GLOBALS[saveDir]/.progress_" . uniqid() . ".tmp";
+        $progressFile = "{$GLOBALS['saveDir']}/.progress_" . uniqid() . ".tmp";
         file_put_contents($progressFile, '0');
         
         // 启动异步复制
@@ -449,7 +449,7 @@ function handleDownload() {
         exit('Forbidden');
     }
     $file = basename($_GET['filename'] ?? '');
-    $path = "$GLOBALS[saveDir]/$file";
+    $path = "{$GLOBALS['saveDir']}/$file";
     if (!$file || !file_exists($path)) {
         http_response_code(404);
         exit('Not found');
@@ -481,14 +481,14 @@ function isServerRunning() {
 
 function handleModList() {
     $files = []; $enabled = [];
-    $modListPath = "$GLOBALS[modDir]/mod-list.json";
+    $modListPath = "{$GLOBALS['modDir']}/mod-list.json";
     if (file_exists($modListPath)) {
         $json = json_decode(file_get_contents($modListPath), true) ?: [];
         foreach ($json['mods'] ?? [] as $m) {
             $enabled[$m['name']] = $m['enabled'];
         }
     }
-    foreach (glob("$GLOBALS[modDir]/*.zip") as $f) {
+    foreach (glob("{$GLOBALS['modDir']}/*.zip") as $f) {
         $fn = basename($f);
         $name = preg_replace('/^(.+?)_\d+\.\d+\.\d+\.zip$/', '$1', $fn);
         $name = $name === $fn ? pathinfo($fn, PATHINFO_FILENAME) : $name;
@@ -510,7 +510,7 @@ function handleModList() {
 function handleModToggle() {
     $name = $_POST['name'] ?? '';
     $state = $_POST['enabled'] === 'true';
-    $path = "$GLOBALS[modDir]/mod-list.json";
+    $path = "{$GLOBALS['modDir']}/mod-list.json";
     $data = file_exists($path) ? json_decode(file_get_contents($path), true) : ['mods'=>[]];
     $found = false;
     foreach ($data['mods'] as &$m) {
@@ -534,7 +534,7 @@ function handleModUpload() {
     foreach ($_FILES['file']['name'] as $i => $n) {
         if (strtolower(pathinfo($n, PATHINFO_EXTENSION)) === 'zip') {
             $safe = preg_replace('/[^a-zA-Z0-9._-]/', '', $n);
-            if (move_uploaded_file($_FILES['file']['tmp_name'][$i], "$GLOBALS[modDir]/$safe")) $ok++;
+            if (move_uploaded_file($_FILES['file']['tmp_name'][$i], "{$GLOBALS['modDir']}/$safe")) $ok++;
         }
     }
     echo json_encode(['message'=>"上传成功 $ok 个模组"]);
@@ -542,7 +542,7 @@ function handleModUpload() {
 
 function handleModDelete() {
     $f = basename($_GET['filename'] ?? '');
-    $p = "$GLOBALS[modDir]/$f";
+    $p = "{$GLOBALS['modDir']}/$f";
     if (file_exists($p) && strtolower(pathinfo($p, PATHINFO_EXTENSION)) === 'zip') {
         unlink($p);
         echo json_encode(['message'=>'已删除']);
@@ -597,7 +597,7 @@ function handleModPortalInstall() {
     usort($data['releases'], fn($a, $b) => version_compare($b['version'], $a['version']));
     $latest = $data['releases'][0];
     $downloadUrl = $latest['download_url'] . "?username=$user&token=$token";
-    $target = "$GLOBALS[modDir]/{$latest['file_name']}";
+    $target = "{$GLOBALS['modDir']}/{$latest['file_name']}";
     $fp = fopen($target, 'wb');
     $ch = curl_init("https://mods.factorio.com$downloadUrl");
     curl_setopt_array($ch, [
@@ -611,7 +611,7 @@ function handleModPortalInstall() {
     curl_close($ch);
     fclose($fp);
     if ($code === 200 && filesize($target) > 1000) {
-        $listFile = "$GLOBALS[modDir]/mod-list.json";
+        $listFile = "{$GLOBALS['modDir']}/mod-list.json";
         $list = file_exists($listFile) ? json_decode(file_get_contents($listFile), true) : ['mods'=>[]];
         $found = false;
         foreach ($list['mods'] as &$m) {
@@ -652,9 +652,9 @@ function handlePlayerLists() {
     };
     
     echo json_encode([
-        'admins'     => $safeReadList("$GLOBALS[serverRoot]/server-adminlist.json"),
-        'bans'       => $safeReadList("$GLOBALS[serverRoot]/server-banlist.json"),
-        'whitelist'  => $safeReadList("$GLOBALS[serverRoot]/server-whitelist.json")
+        'admins'     => $safeReadList("{$GLOBALS['serverRoot']}/server-adminlist.json"),
+        'bans'       => $safeReadList("{$GLOBALS['serverRoot']}/server-banlist.json"),
+        'whitelist'  => $safeReadList("{$GLOBALS['serverRoot']}/server-whitelist.json")
     ]);
 }
 
@@ -682,7 +682,7 @@ function handleGetVersions() {
     if (file_exists($GLOBALS['binPath'])) {
         $list[] = ['id'=>'default', 'name'=>'默认版本'];
     }
-    foreach (glob("$GLOBALS[versionsDir]/*", GLOB_ONLYDIR) as $d) {
+    foreach (glob("{$GLOBALS['versionsDir']}/*", GLOB_ONLYDIR) as $d) {
         $possiblePaths = [
             "$d/factorio/bin/x64/factorio",
             "$d/bin/x64/factorio"
@@ -700,11 +700,11 @@ function handleGetVersions() {
 
 function handleUpdateInstall() {
     $v = $_POST['version'] ?? '';
-    if (!$v || is_dir("$GLOBALS[versionsDir]/$v")) {
+    if (!$v || is_dir("{$GLOBALS['versionsDir']}/$v")) {
         echo json_encode(['error'=>'版本无效或已存在']);
         exit;
     }
-    $tmp = "$GLOBALS[versionsDir]/temp_$v.tar.xz";
+    $tmp = "{$GLOBALS['versionsDir']}/temp_$v.tar.xz";
     $url = "https://www.factorio.com/get-download/$v/headless/linux64";
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -719,8 +719,8 @@ function handleUpdateInstall() {
         echo json_encode(['error'=>'下载失败']);
         exit;
     }
-    mkdir("$GLOBALS[versionsDir]/$v", 0755, true);
-    shell_exec("tar -xf " . escapeshellarg($tmp) . " -C " . escapeshellarg("$GLOBALS[versionsDir]/$v") . " --strip-components=1");
+    mkdir("{$GLOBALS['versionsDir']}/$v", 0755, true);
+    shell_exec("tar -xf " . escapeshellarg($tmp) . " -C " . escapeshellarg("{$GLOBALS['versionsDir']}/$v") . " --strip-components=1");
     unlink($tmp);
     echo json_encode(['message'=>'安装完成']);
 }
