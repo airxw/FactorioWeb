@@ -1314,9 +1314,20 @@ window.controlServer = async (act) => {
 
     window.saveGame = async () => {
         const fd = new FormData();
-        fd.append('cmd', '/save');
-        fd.append('action', 'console');
-        await apiCall('console', fd);
+        fd.append('action', 'save_game');
+        
+        try {
+            showToast('正在保存游戏，请稍候...', 'info');
+            
+            const result = await apiCall('save_game', fd);
+            
+            // 刷新存档列表
+            await refreshMapList();
+            
+            showToast(result.message || '游戏保存成功！', 'success');
+        } catch (e) {
+            showToast('保存失败：' + (e.message || '未知错误'), 'error');
+        }
     };
 
     // === 版本更新 ===

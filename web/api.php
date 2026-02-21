@@ -124,6 +124,7 @@ switch ($action) {
     case 'start':               handleStart(); break;
     case 'stop':                handleStop(); break;
     case 'console':             handleConsole(); break;
+    case 'save_game':           handleSaveGame(); break;
     case 'files':               handleListFiles(); break;
     case 'upload':              handleUpload(); break;
     case 'delete_file':         handleDeleteFile(); break;
@@ -413,6 +414,66 @@ function handleStop() {
         shell_exec("screen -S factorio_server -X quit");
     }
     echo json_encode(['message' => '服务器正在关闭']);
+}
+
+function handleSaveGame() {
+    if (!isServerRunning()) {
+        echo json_encode(['error' => '服务器未运行，无法保存']);
+        exit;
+    }
+    
+    // 获取当前存档名
+    $currentSave = getCurrentSave();
+    
+    // 发送 /save 命令给 Factorio
+    $escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], '/save');
+    shell_exec("screen -S factorio_server -p 0 -X stuff \"$escaped\n\"");
+    
+    // 等待 Factorio 完成保存（等待更长时间）
+    sleep(3);
+    
+    // 获取保存前的文件列表
+    $beforeFiles = [];
+    foreach (glob("{$GLOBALS['saveDir']}/*.zip") as $f) {
+        $beforeFiles[basename($f)] = filemtime($f);
+    }
+    
+    // 再等一下
+    sleep(1);
+    
+    // 检查是否有新文件或文件修改
+    $newSave = null;
+    foreach (glob("{$GLOBALS['saveDir']}/*.zip") as $f) {
+        $bn = basename($f);
+        $mtime = filemtime($f);
+        
+        if ($bn === 'current.zip') {
+            continue;
+        }
+        
+        // 检查是否是新文件或最近修改的文件
+        if (!isset($beforeFiles[$bn]) || $mtime > $beforeFiles[$bn]) {
+            $newSave = $bn;
+            break;
+        }
+    }
+    
+    // 如果找到了新保存的文件，创建一个带时间戳的备份
+    if ($newSave && file_exists("{$GLOBALS['saveDir']}/$newSave")) {
+        $timestamp = date('Ymd_His');
+        $backupName = pathinfo($newSave, PATHINFO_FILENAME) . "_backup_$timestamp.zip";
+        copy("{$GLOBALS['saveDir']}/$newSave", "{$GLOBALS['saveDir']}/$backupName");
+        
+        echo json_encode([
+            'message' => "游戏保存成功！备份已创建：$backupName",
+            'saved_file' => $newSave,
+            'backup_file' => $backupName
+        ]);
+    } else {
+        echo json_encode([
+            'message' => '保存命令已发送，请稍候查看存档列表'
+        ]);
+    }
 }
 
 function handleConsole() {
