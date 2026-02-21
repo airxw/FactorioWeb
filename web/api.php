@@ -37,9 +37,35 @@ $saveDir     = "$baseDir/server/saves";
 $configDir   = "$baseDir/server/configs";
 $modDir      = "$baseDir/mods";
 $logFile     = "$baseDir/factorio-current.log";
+$stateFile   = "$saveDir/.state.json";
 
 foreach ([$saveDir, $configDir, $modDir, $versionsDir] as $dir) {
     if (!is_dir($dir)) mkdir($dir, 0755, true);
+}
+
+function getState() {
+    global $stateFile;
+    if (file_exists($stateFile)) {
+        $data = json_decode(file_get_contents($stateFile), true);
+        return $data ?: [];
+    }
+    return [];
+}
+
+function setState($key, $value) {
+    global $stateFile;
+    $state = getState();
+    $state[$key] = $value;
+    file_put_contents($stateFile, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
+function getCurrentSave() {
+    $state = getState();
+    return $state['current_save'] ?? 'current.zip';
+}
+
+function setCurrentSaveName($filename) {
+    setState('current_save', $filename);
 }
 
 switch ($action) {
@@ -175,12 +201,23 @@ function handleSetCurrentSave() {
         echo json_encode(['error' => 'current.zip 不可写，请检查权限']);
         exit;
     }
+    
+    $fileSize = filesize($src);
+    $sizeMB = round($fileSize / 1024 / 1024, 2);
+    
     if (file_exists($dst)) {
         @unlink($dst);
     }
+    
     if (copy($src, $dst)) {
         chmod($dst, 0644);
-        echo json_encode(['message' => "已切换到存档：$file，大小：" . round(filesize($dst) / 1024 / 1024, 2) . " MB"]);
+        setCurrentSaveName($file);
+        echo json_encode([
+            'message' => "已切换到存档：$file",
+            'filename' => $file,
+            'size' => $sizeMB,
+            'copied' => true
+        ]);
     } else {
         $error = error_get_last();
         echo json_encode(['error' => '切换失败：' . ($error['message'] ?? '未知错误')]);
@@ -198,41 +235,59 @@ function handleListFiles() {
     }
     
     $files = [];
+    $currentSave = getCurrentSave();
     
     if (!is_dir($dir)) {
-        echo json_encode(['files' => [], 'error' => '目录不存在: ' . $dir]);
+        echo json_encode(['files' => [], 'error' => '目录不存在: ' . $dir, 'current_save' => $currentSave]);
         return;
     }
     
     $foundFiles = glob("$dir/$pattern");
     if ($foundFiles === false) {
-        echo json_encode(['files' => [], 'error' => '读取目录失败']);
+        echo json_encode(['files' => [], 'error' => '读取目录失败', 'current_save' => $currentSave]);
         return;
     }
     
     foreach ($foundFiles as $f) {
         $bn = basename($f);
         if (str_ends_with($bn, '.tmp.zip')) continue;
+        if ($bn === 'current.zip') continue;
         
         $display = $bn;
+        $isCurrent = ($bn === $currentSave);
+        
         if (preg_match('/^(.+)_autosave\d+\.zip$/', $bn, $m)) {
             $display = "自动存档 ← {$m[1]}";
         } elseif (strpos($bn, '_autosave') === 0) {
             $display = "自动存档 " . substr($bn, 10, -4);
-        } elseif ($bn === 'current.zip') {
-            $display = "当前存档（启动用）";
+        }
+        
+        if ($isCurrent) {
+            $display = "✅ " . $display . " (当前使用中)";
         }
         
         $files[] = [
             'filename' => $bn,
             'display'  => $display,
             'size'     => round(filesize($f) / 1024 / 1024, 2),
-            'time'     => filemtime($f)
+            'time'     => filemtime($f),
+            'is_current' => $isCurrent
         ];
     }
     
-    usort($files, fn($a, $b) => $b['time'] - $a['time']);
-    echo json_encode(['files' => $files, 'count' => count($files), 'dir' => $dir]);
+    usort($files, function($a, $b) {
+        if ($a['is_current'] !== $b['is_current']) {
+            return $a['is_current'] ? -1 : 1;
+        }
+        return $b['time'] - $a['time'];
+    });
+    
+    echo json_encode([
+        'files' => $files, 
+        'count' => count($files), 
+        'dir' => $dir,
+        'current_save' => $currentSave
+    ]);
 }
 
 function handleStop() {

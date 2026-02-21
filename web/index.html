@@ -1027,7 +1027,6 @@ async function searchModPortal() {
     }
 
     // === 文件管理 ===
-    async function refreshMapList() { loadDropdown('map', 'map-select'); }
     // 刷新存档列表时，顺便显示历史记录
 async function refreshMapList() {
     const r = await fetch('api.php?action=files&type=map');
@@ -1046,31 +1045,46 @@ async function refreshMapList() {
     d.files.forEach(f => {
         // 下拉菜单
         const opt = new Option(`${f.display || f.filename} (${f.size}MB)`, f.filename);
-        if (f.filename === 'current.zip') opt.selected = true;
+        if (f.is_current) opt.selected = true;
         sel.add(opt);
 
         // 历史列表
-        const active = f.filename === 'current.zip' ? 'list-group-item-success' : '';
+        const active = f.is_current ? 'list-group-item-success' : '';
         hist.innerHTML += `
             <a href="javascript:void(0)" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center ${active}">
                 <div>
                     <div class="fw-600">${f.display || f.filename}</div>
                     <small class="text-muted">${new Date(f.time*1000).toLocaleString()} · ${f.size} MB</small>
                 </div>
-                ${f.filename !== 'current.zip' ? `<button class="btn btn-sm btn-outline-primary" onclick="useThisSave('${f.filename}')">使用此存档</button>` : '<span class="badge bg-success">当前使用</span>'}
+                ${!f.is_current ? `<button class="btn btn-sm btn-outline-primary" onclick="useThisSave('${f.filename}', ${f.size})">使用此存档</button>` : '<span class="badge bg-success">当前使用</span>'}
             </a>`;
     });
 }
 
 // 一键切换存档（回档）
-function useThisSave(name) {
-    if (confirm(`确认切换到存档：${name}？服务器重启后生效`)) {
-        const fd = new FormData();
-        fd.append('filename', name);
-        apiCall('set_current_save', fd).then(() => {
-            showToast('已切换存档，下次启动将使用：' + name, 'success');
-            refreshMapList();
-        });
+async function useThisSave(name, sizeMB) {
+    if (!confirm(`确认切换到存档：${name}？\n\n存档大小：${sizeMB} MB\n复制可能需要一些时间，请耐心等待。`)) {
+        return;
+    }
+    
+    const fd = new FormData();
+    fd.append('filename', name);
+    
+    try {
+        showToast('正在切换存档，请稍候...', 'info');
+        
+        const r = await fetch('api.php?action=set_current_save', { method: 'POST', body: fd });
+        const d = await r.json();
+        
+        if (d.error) {
+            showToast(d.error, 'error');
+            return;
+        }
+        
+        showToast(d.message || '存档切换成功！', 'success');
+        refreshMapList();
+    } catch (e) {
+        showToast('切换存档失败：' + (e.message || '未知错误'), 'error');
     }
 }
     async function refreshConfigList() { loadDropdown('config', 'config-select'); }
