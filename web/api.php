@@ -167,10 +167,23 @@ function handleSetCurrentSave() {
         echo json_encode(['error' => '存档文件不存在']);
         exit;
     }
+    if (!is_writable($GLOBALS[saveDir])) {
+        echo json_encode(['error' => '目录不可写，请检查权限']);
+        exit;
+    }
+    if (file_exists($dst) && !is_writable($dst)) {
+        echo json_encode(['error' => 'current.zip 不可写，请检查权限']);
+        exit;
+    }
+    if (file_exists($dst)) {
+        @unlink($dst);
+    }
     if (copy($src, $dst)) {
-        echo json_encode(['message' => "已切换到存档：$file"]);
+        chmod($dst, 0644);
+        echo json_encode(['message' => "已切换到存档：$file，大小：" . round(filesize($dst) / 1024 / 1024, 2) . " MB"]);
     } else {
-        echo json_encode(['error' => '切换失败']);
+        $error = error_get_last();
+        echo json_encode(['error' => '切换失败：' . ($error['message'] ?? '未知错误')]);
     }
 }
 
@@ -183,10 +196,24 @@ function handleListFiles() {
         $dir = $GLOBALS['saveDir'];
         $pattern = "*.zip";
     }
+    
     $files = [];
-    foreach (glob("$dir/$pattern") as $f) {
+    
+    if (!is_dir($dir)) {
+        echo json_encode(['files' => [], 'error' => '目录不存在: ' . $dir]);
+        return;
+    }
+    
+    $foundFiles = glob("$dir/$pattern");
+    if ($foundFiles === false) {
+        echo json_encode(['files' => [], 'error' => '读取目录失败']);
+        return;
+    }
+    
+    foreach ($foundFiles as $f) {
         $bn = basename($f);
         if (str_ends_with($bn, '.tmp.zip')) continue;
+        
         $display = $bn;
         if (preg_match('/^(.+)_autosave\d+\.zip$/', $bn, $m)) {
             $display = "自动存档 ← {$m[1]}";
@@ -195,6 +222,7 @@ function handleListFiles() {
         } elseif ($bn === 'current.zip') {
             $display = "当前存档（启动用）";
         }
+        
         $files[] = [
             'filename' => $bn,
             'display'  => $display,
@@ -202,8 +230,9 @@ function handleListFiles() {
             'time'     => filemtime($f)
         ];
     }
+    
     usort($files, fn($a, $b) => $b['time'] - $a['time']);
-    echo json_encode(['files' => $files]);
+    echo json_encode(['files' => $files, 'count' => count($files), 'dir' => $dir]);
 }
 
 function handleStop() {
@@ -461,9 +490,19 @@ function handlePlayerLists() {
 function handleUpdateCheck() {
     $json = @file_get_contents("https://factorio.com/api/latest-releases");
     $data = json_decode($json, true) ?: [];
+    
+    $currentVersion = 'unknown';
+    if (file_exists($GLOBALS['binPath'])) {
+        $output = shell_exec($GLOBALS['binPath'] . ' --version 2>&1');
+        if ($output && preg_match('/Version:?\s*([\d.]+)/i', $output, $matches)) {
+            $currentVersion = $matches[1];
+        }
+    }
+    
     echo json_encode([
         'stable'       => $data['stable']['headless'] ?? 'unknown',
-        'experimental' => $data['experimental']['headless'] ?? 'unknown'
+        'experimental' => $data['experimental']['headless'] ?? 'unknown',
+        'current'      => $currentVersion
     ]);
 }
 

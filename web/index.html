@@ -1215,9 +1215,44 @@ window.controlServer = async (act) => {
         try {
             const r = await fetch('api.php?action=update_check');
             const d = await r.json();
+            
             document.getElementById('ver-stable').innerText = d.stable || 'N/A';
             document.getElementById('ver-exp').innerText = d.experimental || 'N/A';
-        } catch (e) { showToast('检查更新失败', 'error'); }
+            
+            const updateLog = document.getElementById('update-log');
+            updateLog.classList.remove('d-none');
+            
+            let logHtml = '<div class="mb-2"><strong>当前版本：</strong> ' + (d.current || 'unknown') + '</div>';
+            
+            if (d.stable && d.current && d.current !== 'unknown') {
+                if (versionCompare(d.stable, d.current) > 0) {
+                    logHtml += '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>发现新版本！稳定版 v' + d.stable + ' 可用</div>';
+                } else if (d.stable === d.current) {
+                    logHtml += '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>当前已是最新版本</div>';
+                } else {
+                    logHtml += '<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>当前版本比最新稳定版还要新</div>';
+                }
+            }
+            
+            updateLog.innerHTML = logHtml;
+        } catch (e) { 
+            showToast('检查更新失败', 'error'); 
+            document.getElementById('update-log').classList.remove('d-none');
+            document.getElementById('update-log').innerHTML = '<div class="alert alert-danger">检查更新失败: ' + (e.message || '未知错误') + '</div>';
+        }
+    }
+    
+    function versionCompare(v1, v2) {
+        const parts1 = v1.split('.').map(Number);
+        const parts2 = v2.split('.').map(Number);
+        
+        for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+            const p1 = parts1[i] || 0;
+            const p2 = parts2[i] || 0;
+            if (p1 > p2) return 1;
+            if (p1 < p2) return -1;
+        }
+        return 0;
     }
 
     async function installVer(v) {
