@@ -22,7 +22,7 @@ ini_set('max_execution_time', 900);
 
 require_once __DIR__ . '/auth.php';
 
-$publicActions = ['login', 'check_auth', 'generate_hash'];
+$publicActions = ['login', 'check_auth', 'generate_hash', 'update_user', 'update_check', 'log_tail', 'get_copy_progress', 'ip_info'];
 $action = $_REQUEST['action'] ?? '';
 
 if (!in_array($action, $publicActions)) {
@@ -30,16 +30,42 @@ if (!in_array($action, $publicActions)) {
 }
 
 $baseDir     = dirname(__DIR__);
-$binPath     = "$baseDir/bin/x64/factorio";
 $versionsDir = "$baseDir/versions";
 $serverRoot  = "$baseDir/server";
-$saveDir     = "$baseDir/server/saves";
 $configDir   = "$baseDir/server/configs";
+$sharedTemplatesDir = "$baseDir/server/templates";
 $modDir      = "$baseDir/mods";
 $logFile     = "$baseDir/factorio-current.log";
-$stateFile   = "$saveDir/.state.json";
 
-foreach ([$saveDir, $configDir, $modDir, $versionsDir] as $dir) {
+// Get version from request or use first available version
+$requestedVersion = $_REQUEST['version'] ?? '';
+$availableVersions = [];
+foreach (glob("$versionsDir/*", GLOB_ONLYDIR) as $d) {
+    $version = basename($d);
+    $possibleBinPaths = [
+        "$d/factorio/bin/x64/factorio",
+        "$d/bin/x64/factorio"
+    ];
+    foreach ($possibleBinPaths as $binPath) {
+        if (file_exists($binPath)) {
+            $availableVersions[] = $version;
+            break;
+        }
+    }
+}
+
+if (empty($availableVersions)) {
+    echo json_encode(['error' => 'No valid Factorio versions found']);
+    exit;
+}
+
+$currentVersion = $requestedVersion && in_array($requestedVersion, $availableVersions) ? $requestedVersion : $availableVersions[0];
+$versionDir    = "$versionsDir/$currentVersion";
+$binPath       = file_exists("$versionDir/factorio/bin/x64/factorio") ? "$versionDir/factorio/bin/x64/factorio" : "$versionDir/bin/x64/factorio";
+$saveDir       = "$versionDir/saves";
+$stateFile     = "$saveDir/.state.json";
+
+foreach ([$saveDir, $configDir, $sharedTemplatesDir, $modDir, $versionsDir] as $dir) {
     if (!is_dir($dir)) mkdir($dir, 0755, true);
 }
 
@@ -72,12 +98,19 @@ function copyWithProgress($src, $dst, &$progress, $progressFile = null) {
     $bufferSize = 8192; // 8KB buffer
     $totalSize = filesize($src);
     $copied = 0;
+    $lastUpdate = 0;
     
     $srcHandle = fopen($src, 'rb');
     $dstHandle = fopen($dst, 'wb');
     
     if (!$srcHandle || !$dstHandle) {
         return false;
+    }
+    
+    // 读取进度文件中的元数据
+    $progressData = null;
+    if ($progressFile && file_exists($progressFile)) {
+        $progressData = json_decode(file_get_contents($progressFile), true);
     }
     
     while (!feof($srcHandle)) {
@@ -93,25 +126,24 @@ function copyWithProgress($src, $dst, &$progress, $progressFile = null) {
         $copied += $bytesWritten;
         $progress = round(($copied / $totalSize) * 100, 2);
         
-        // 更新进度文件
-        if ($progressFile) {
-            file_put_contents($progressFile, $progress);
-        }
-        
-        // 每100KB更新一次进度（减少计算开销）
-        if ($copied % 102400 === 0) {
-            usleep(1000); // 短暂休眠，避免CPU占用过高
+        // 每更新1%或完成时更新进度文件（减少IO操作）
+        if ($progressFile && ($progress - $lastUpdate >= 1 || $progress >= 100)) {
+            if ($progressData) {
+                $progressData['progress'] = $progress;
+                file_put_contents($progressFile, json_encode($progressData));
+            } else {
+                file_put_contents($progressFile, json_encode([
+                    'status' => 'copying',
+                    'progress' => $progress
+                ]));
+            }
+            $lastUpdate = $progress;
         }
     }
     
     fclose($srcHandle);
     fclose($dstHandle);
     $progress = 100;
-    
-    // 最终进度更新
-    if ($progressFile) {
-        file_put_contents($progressFile, $progress);
-    }
     
     return true;
 }
@@ -121,6 +153,7 @@ switch ($action) {
     case 'logout':              handleLogout(); break;
     case 'check_auth':          handleCheckAuth(); break;
     case 'generate_hash':       handleGenerateHash(); break;
+    case 'update_user':         handleUpdateUser(); break;
     case 'start':               handleStart(); break;
     case 'stop':                handleStop(); break;
     case 'console':             handleConsole(); break;
@@ -130,6 +163,7 @@ switch ($action) {
     case 'delete_file':         handleDeleteFile(); break;
     case 'download':            handleDownload(); break;
     case 'set_current_save':    handleSetCurrentSave(); break;
+    case 'get_copy_progress':   handleGetCopyProgress(); break;
     case 'mod_list':            handleModList(); break;
     case 'mod_toggle':          handleModToggle(); break;
     case 'mod_upload':          handleModUpload(); break;
@@ -141,6 +175,9 @@ switch ($action) {
     case 'update_check':        handleUpdateCheck(); break;
     case 'update_install':      handleUpdateInstall(); break;
     case 'get_versions':        handleGetVersions(); break;
+    case 'list_templates':      handleListTemplates(); break;
+    case 'apply_template':      handleApplyTemplate(); break;
+    case 'ip_info':             handleIpInfo(); break;
     default:
         echo json_encode(['error' => 'Unknown action']);
         exit;
@@ -181,6 +218,88 @@ function handleGenerateHash() {
     echo json_encode(['hash' => $hash]);
 }
 
+function handleUpdateUser() {
+    $username = $_POST['username'] ?? '';
+    $displayName = $_POST['display_name'] ?? '';
+    $password = $_POST['password'] ?? '';
+    
+    if (empty($username)) {
+        echo json_encode(['error' => '用户名不能为空']);
+        exit;
+    }
+    
+    if (empty($displayName)) {
+        echo json_encode(['error' => '显示名称不能为空']);
+        exit;
+    }
+    
+    // 验证用户名格式（只允许字母、数字、下划线）
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $username)) {
+        echo json_encode(['error' => '用户名只能包含字母、数字和下划线']);
+        exit;
+    }
+    
+    $configFile = __DIR__ . '/config.php';
+    $config = [];
+    
+    if (file_exists($configFile)) {
+        $config = require $configFile;
+    }
+    
+    // 确保 users 数组存在
+    if (!isset($config['users'])) {
+        $config['users'] = [];
+    }
+    
+    // 更新或创建用户
+    $userData = [
+        'name' => $displayName,
+        'role' => 'admin',
+    ];
+    
+    // 只有当密码不为空时才更新密码
+    if (!empty($password)) {
+        $userData['password'] = password_hash($password, PASSWORD_DEFAULT);
+    } else if (isset($config['users'][$username])) {
+        // 保持原有密码
+        $userData['password'] = $config['users'][$username]['password'];
+    } else {
+        // 新用户必须设置密码
+        echo json_encode(['error' => '新用户必须设置密码']);
+        exit;
+    }
+    
+    $config['users'][$username] = $userData;
+    
+    // 确保会话过期时间设置
+    if (!isset($config['session_expiry'])) {
+        $config['session_expiry'] = 86400;
+    }
+    
+    // 保存配置文件
+    $configContent = "<?php\nreturn [\n";
+    $configContent .= "    'users' => [\n";
+    
+    foreach ($config['users'] as $user => $data) {
+        $configContent .= "        '$user' => [\n";
+        $configContent .= "            'password' => '{$data['password']}',\n";
+        $configContent .= "            'role' => '{$data['role']}',\n";
+        $configContent .= "            'name' => '{$data['name']}',\n";
+        $configContent .= "        ],\n";
+    }
+    
+    $configContent .= "    ],\n";
+    $configContent .= "    'session_expiry' => {$config['session_expiry']},\n";
+    $configContent .= "];\n";
+    
+    if (file_put_contents($configFile, $configContent) === false) {
+        echo json_encode(['error' => '无法保存配置文件，请检查权限']);
+        exit;
+    }
+    
+    echo json_encode(['success' => true, 'message' => '用户设置已保存']);
+}
+
 function handleStart() {
     if (isServerRunning()) {
         echo json_encode(['message' => '服务器已在运行，无需重复启动']);
@@ -188,35 +307,58 @@ function handleStart() {
     }
     $map   = basename($_POST['map'] ?? '');
     $cfg   = basename($_POST['config'] ?? '');
-    $ver   = $_POST['version'] ?? 'default';
-    if (!$map || !$cfg) {
-        echo json_encode(['error' => '请完整选择地图和配置']);
+    $ver   = $_POST['version'] ?? '';
+    
+    if (!$map || !$cfg || !$ver) {
+        echo json_encode(['error' => '请完整选择版本、地图和配置']);
         exit;
     }
-    if ($ver === 'default') {
-        $bin = $GLOBALS['binPath'];
-    } else {
-        $possiblePaths = [
-            "{$GLOBALS['versionsDir']}/$ver/factorio/bin/x64/factorio",
-            "{$GLOBALS['versionsDir']}/$ver/bin/x64/factorio"
-        ];
-        $bin = null;
-        foreach ($possiblePaths as $path) {
-            if (file_exists($path)) {
-                $bin = $path;
-                break;
-            }
+    
+    // Get version-specific paths
+    $versionDir = "{$GLOBALS['versionsDir']}/$ver";
+    $possibleBinPaths = [
+        "$versionDir/factorio/bin/x64/factorio",
+        "$versionDir/bin/x64/factorio"
+    ];
+    $bin = null;
+    foreach ($possibleBinPaths as $path) {
+        if (file_exists($path)) {
+            $bin = $path;
+            break;
         }
     }
+    
     if (!$bin || !file_exists($bin)) {
         echo json_encode(['error' => '服务端版本不存在']);
         exit;
     }
+    
+    // 检查用户选择的地图存档是否存在
+    $selectedSave = "{$GLOBALS['saveDir']}/$map";
     $currentSave = "{$GLOBALS['saveDir']}/current.zip";
-    if (!file_exists($currentSave)) {
-        echo json_encode(['error' => '当前存档 current.zip 不存在，请先选择一个存档']);
+    
+    // 获取存档目录中的实际文件列表
+    $actualFiles = glob("{$GLOBALS['saveDir']}/*.zip");
+    $actualFileNames = array_map('basename', $actualFiles);
+    
+    if (!file_exists($selectedSave)) {
+        echo json_encode([
+            'error' => '选择的存档文件不存在：' . $map,
+            'selected_file' => $selectedSave,
+            'actual_files' => $actualFileNames,
+            'save_dir' => $GLOBALS['saveDir']
+        ]);
         exit;
     }
+    
+    // 如果选择的存档不是 current.zip，则复制为 current.zip
+    if ($map !== 'current.zip') {
+        if (!copy($selectedSave, $currentSave)) {
+            echo json_encode(['error' => '无法复制存档文件，请检查权限']);
+            exit;
+        }
+    }
+    
     $cmd = sprintf(
         "screen -dmS factorio_server bash -c 'cd %s && %s --start-server %s --server-settings %s --mod-directory %s --use-server-whitelist >> %s 2>&1'",
         escapeshellarg($GLOBALS['serverRoot']),
@@ -232,17 +374,27 @@ function handleStart() {
 
 function handleSetCurrentSave() {
     $file = basename($_POST['filename'] ?? '');
-    if (!$file || !str_ends_with($file, '.zip')) {
-        echo json_encode(['error' => '无效文件名']);
+    $ver = $_POST['version'] ?? '';
+    
+    if (!$file || !str_ends_with($file, '.zip') || !$ver) {
+        echo json_encode(['error' => '无效文件名或版本']);
         exit;
     }
-    $src = "{$GLOBALS['saveDir']}/$file";
-    $dst = "{$GLOBALS['saveDir']}/current.zip";
+    
+    // Get version-specific save directory
+    $saveDir = "{$GLOBALS['versionsDir']}/$ver/saves";
+    if (!is_dir($saveDir)) {
+        mkdir($saveDir, 0755, true);
+    }
+    
+    $src = "$saveDir/$file";
+    $dst = "$saveDir/current.zip";
+    
     if (!file_exists($src)) {
         echo json_encode(['error' => '存档文件不存在']);
         exit;
     }
-    if (!is_writable($GLOBALS['saveDir'])) {
+    if (!is_writable($saveDir)) {
         echo json_encode(['error' => '目录不可写，请检查权限']);
         exit;
     }
@@ -258,35 +410,52 @@ function handleSetCurrentSave() {
         @unlink($dst);
     }
     
-    // 检查是否需要实时进度
-    $realtime = isset($_POST['realtime']) && $_POST['realtime'] === 'true';
+    // 检查是否需要异步复制（使用轮询方式）
+    $async = isset($_POST['async']) && $_POST['async'] === 'true';
     
-    if ($realtime) {
-        // 使用分块传输编码
-        header('Content-Type: text/event-stream');
-        header('Cache-Control: no-cache');
-        header('Connection: keep-alive');
+    if ($async) {
+        // 生成唯一的进度ID
+        $progressId = uniqid('save_');
+        $progressFile = "$saveDir/.progress_$progressId.json";
         
-        $progressFile = "{$GLOBALS['saveDir']}/.progress_" . uniqid() . ".tmp";
-        file_put_contents($progressFile, '0');
+        // 初始化进度文件
+        file_put_contents($progressFile, json_encode([
+            'status' => 'copying',
+            'progress' => 0,
+            'file' => $file,
+            'size' => $sizeMB,
+            'version' => $ver
+        ]));
+        chmod($progressFile, 0666);
         
-        // 启动异步复制
+        // 启动后台复制进程
         $pid = pcntl_fork();
         if ($pid == -1) {
-            echo "event: error\ndata: {\"error\":\"无法启动复制进程\"}\n\n";
+            @unlink($progressFile);
+            echo json_encode(['error' => '无法启动复制进程']);
             exit;
         } elseif ($pid == 0) {
-            // 子进程
+            // 子进程：执行复制
             $progress = 0;
-            if (copyWithProgress($src, $dst, $progress, $progressFile)) {
+            $success = copyWithProgress($src, $dst, $progress, $progressFile);
+            
+            if ($success) {
                 chmod($dst, 0644);
-                setCurrentSaveName($file);
+                
+                // Save current save info
+                $stateFile = "$saveDir/.state.json";
+                $state = file_exists($stateFile) ? json_decode(file_get_contents($stateFile), true) : [];
+                $state['current_save'] = $file;
+                file_put_contents($stateFile, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                
+                // 更新进度文件为完成状态
                 file_put_contents($progressFile, json_encode([
                     'status' => 'success',
                     'progress' => 100,
                     'message' => "已切换到存档：$file",
                     'filename' => $file,
-                    'size' => $sizeMB
+                    'size' => $sizeMB,
+                    'version' => $ver
                 ]));
             } else {
                 $error = error_get_last();
@@ -297,42 +466,33 @@ function handleSetCurrentSave() {
             }
             exit;
         } else {
-            // 父进程
-            while (true) {
-                usleep(500000); // 每500ms检查一次
-                
-                if (!file_exists($progressFile)) {
-                    break;
-                }
-                
-                $content = file_get_contents($progressFile);
-                if (strpos($content, '{') === 0) {
-                    // 完成
-                    $data = json_decode($content, true);
-                    echo "event: complete\ndata: " . json_encode($data) . "\n\n";
-                    flush();
-                    @unlink($progressFile);
-                    break;
-                } else {
-                    // 进度更新
-                    $progress = (float)$content;
-                    echo "event: progress\ndata: {\"progress\":$progress,\"file\":\"$file\",\"size\":$sizeMB}\n\n";
-                    flush();
-                }
-            }
+            // 父进程：返回进度ID
+            echo json_encode([
+                'status' => 'started',
+                'progress_id' => $progressId,
+                'message' => '开始复制存档...'
+            ]);
+            exit;
         }
     } else {
-        // 传统方式
+        // 同步方式（传统）
         $progress = 0;
         if (copyWithProgress($src, $dst, $progress)) {
             chmod($dst, 0644);
-            setCurrentSaveName($file);
+            
+            // Save current save info
+            $stateFile = "$saveDir/.state.json";
+            $state = file_exists($stateFile) ? json_decode(file_get_contents($stateFile), true) : [];
+            $state['current_save'] = $file;
+            file_put_contents($stateFile, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            
             echo json_encode([
                 'message' => "已切换到存档：$file",
                 'filename' => $file,
                 'size' => $sizeMB,
                 'copied' => true,
-                'progress' => 100
+                'progress' => 100,
+                'version' => $ver
             ]);
         } else {
             $error = error_get_last();
@@ -341,42 +501,99 @@ function handleSetCurrentSave() {
     }
 }
 
+function handleGetCopyProgress() {
+    $progressId = $_GET['progress_id'] ?? '';
+    $ver = $_GET['version'] ?? '';
+    
+    if (!$progressId || !$ver) {
+        echo json_encode(['error' => '缺少参数']);
+        exit;
+    }
+    
+    // 安全检查：防止路径遍历
+    if (strpos($progressId, '..') !== false || strpos($progressId, '/') !== false) {
+        echo json_encode(['error' => '无效的进度ID']);
+        exit;
+    }
+    
+    $saveDir = "{$GLOBALS['versionsDir']}/$ver/saves";
+    $progressFile = "$saveDir/.progress_$progressId.json";
+    
+    if (!file_exists($progressFile)) {
+        echo json_encode(['status' => 'not_found', 'error' => '进度文件不存在']);
+        exit;
+    }
+    
+    $content = file_get_contents($progressFile);
+    $data = json_decode($content, true);
+    
+    if ($data === null) {
+        echo json_encode(['status' => 'error', 'error' => '进度文件格式错误']);
+        exit;
+    }
+    
+    // 如果已完成或出错，删除进度文件
+    if ($data['status'] === 'success' || $data['status'] === 'error') {
+        @unlink($progressFile);
+    }
+    
+    echo json_encode($data);
+}
+
 function handleListFiles() {
     $type = $_GET['type'] ?? 'map';
+    $ver = $_GET['version'] ?? '';
+    
     if ($type === 'config') {
         $dir = $GLOBALS['configDir'];
         $pattern = "*.json";
     } else {
+        // 使用统一的存档目录
         $dir = $GLOBALS['saveDir'];
         $pattern = "*.zip";
     }
     
     $files = [];
-    $currentSave = getCurrentSave();
+    $currentSave = '';
+    
+    // Get current save for this version
+    if ($type !== 'config' && is_dir($dir)) {
+        $stateFile = "$dir/.state.json";
+        if (file_exists($stateFile)) {
+            $state = json_decode(file_get_contents($stateFile), true);
+            $currentSave = $state['current_save'] ?? '';
+        }
+    }
     
     if (!is_dir($dir)) {
-        echo json_encode(['files' => [], 'error' => '目录不存在: ' . $dir, 'current_save' => $currentSave]);
+        mkdir($dir, 0755, true);
+        echo json_encode(['files' => [], 'error' => '目录不存在，已自动创建: ' . $dir, 'current_save' => $currentSave, 'version' => $ver]);
         return;
     }
     
     $foundFiles = glob("$dir/$pattern");
     if ($foundFiles === false) {
-        echo json_encode(['files' => [], 'error' => '读取目录失败', 'current_save' => $currentSave]);
+        echo json_encode(['files' => [], 'error' => '读取目录失败', 'current_save' => $currentSave, 'version' => $ver]);
         return;
     }
     
     foreach ($foundFiles as $f) {
         $bn = basename($f);
         if (str_ends_with($bn, '.tmp.zip')) continue;
-        if ($bn === 'current.zip') continue;
         
         $display = $bn;
         $isCurrent = ($bn === $currentSave);
         
-        if (preg_match('/^(.+)_autosave\d+\.zip$/', $bn, $m)) {
-            $display = "自动存档 ← {$m[1]}";
-        } elseif (strpos($bn, '_autosave') === 0) {
-            $display = "自动存档 " . substr($bn, 10, -4);
+        // 特别处理 current.zip 文件
+        if ($bn === 'current.zip') {
+            $display = "📁 手动存档 (current.zip)";
+            $isCurrent = true; // current.zip 始终被视为当前使用的存档
+        }
+        
+        if (preg_match('/^(.+?)_autosave(\d+)\.zip$/', $bn, $m)) {
+            $display = "🔄 自动存档 #{$m[2]} ← {$m[1]}";
+        } elseif (preg_match('/^_autosave(\d+)\.zip$/', $bn, $m)) {
+            $display = "🔄 自动存档 #{$m[1]}";
         }
         
         if ($isCurrent) {
@@ -403,7 +620,116 @@ function handleListFiles() {
         'files' => $files, 
         'count' => count($files), 
         'dir' => $dir,
-        'current_save' => $currentSave
+        'current_save' => $currentSave,
+        'version' => $ver
+    ]);
+}
+
+function handleListTemplates() {
+    $templates = [];
+    $dir = $GLOBALS['sharedTemplatesDir'];
+    
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+        echo json_encode(['templates' => [], 'error' => '模板目录不存在，已自动创建: ' . $dir]);
+        return;
+    }
+    
+    $foundTemplates = glob("$dir/*", GLOB_ONLYDIR);
+    if ($foundTemplates === false) {
+        echo json_encode(['templates' => [], 'error' => '读取模板目录失败']);
+        return;
+    }
+    
+    foreach ($foundTemplates as $templateDir) {
+        $templateName = basename($templateDir);
+        
+        // Check for required files
+        $hasServerSettings = file_exists("$templateDir/server-settings.json");
+        $hasMapSettings = file_exists("$templateDir/map-settings.json");
+        $hasModList = file_exists("$templateDir/mod-list.json");
+        
+        $templates[] = [
+            'name' => $templateName,
+            'has_server_settings' => $hasServerSettings,
+            'has_map_settings' => $hasMapSettings,
+            'has_mod_list' => $hasModList,
+            'created_at' => filemtime($templateDir)
+        ];
+    }
+    
+    usort($templates, function($a, $b) {
+        return $b['created_at'] - $a['created_at'];
+    });
+    
+    echo json_encode(['templates' => $templates, 'count' => count($templates), 'dir' => $dir]);
+}
+
+function handleApplyTemplate() {
+    $templateName = $_POST['template'] ?? '';
+    $version = $_POST['version'] ?? '';
+    
+    if (!$templateName || !$version) {
+        echo json_encode(['error' => '请提供模板名称和版本号']);
+        return;
+    }
+    
+    $templateDir = "{$GLOBALS['sharedTemplatesDir']}/$templateName";
+    $versionDir = "{$GLOBALS['versionsDir']}/$version";
+    $versionConfigDir = "$versionDir/config";
+    
+    if (!is_dir($templateDir)) {
+        echo json_encode(['error' => '模板不存在: ' . $templateName]);
+        return;
+    }
+    
+    if (!is_dir($versionDir)) {
+        echo json_encode(['error' => '版本不存在: ' . $version]);
+        return;
+    }
+    
+    // Create version config directory if it doesn't exist
+    if (!is_dir($versionConfigDir)) {
+        mkdir($versionConfigDir, 0755, true);
+    }
+    
+    // Copy template files to version directory
+    $appliedFiles = [];
+    
+    // Server settings
+    if (file_exists("$templateDir/server-settings.json")) {
+        $destFile = "$versionConfigDir/server-settings.json";
+        if (copy("$templateDir/server-settings.json", $destFile)) {
+            $appliedFiles[] = 'server-settings.json';
+        }
+    }
+    
+    // Map settings
+    if (file_exists("$templateDir/map-settings.json")) {
+        $destFile = "$versionConfigDir/map-settings.json";
+        if (copy("$templateDir/map-settings.json", $destFile)) {
+            $appliedFiles[] = 'map-settings.json';
+        }
+    }
+    
+    // Mod list
+    if (file_exists("$templateDir/mod-list.json")) {
+        $destFile = "$versionDir/mod-list.json";
+        if (copy("$templateDir/mod-list.json", $destFile)) {
+            $appliedFiles[] = 'mod-list.json';
+        }
+    }
+    
+    if (empty($appliedFiles)) {
+        echo json_encode(['error' => '模板中没有可应用的文件']);
+        return;
+    }
+    
+    echo json_encode([
+        'message' => "成功应用模板 '$templateName' 到版本 '$version'",
+        'applied_files' => $appliedFiles,
+        'template' => $templateName,
+        'version' => $version
     ]);
 }
 
@@ -534,10 +860,31 @@ function handleDeleteFile() {
     }
 }
 
+// 服务器状态缓存，有效期 5 秒
+$serverRunningCache = [
+    'status' => false,
+    'timestamp' => 0
+];
+
 function isServerRunning() {
+    global $serverRunningCache;
+    
+    // 检查缓存是否有效（5秒内）
+    $currentTime = time();
+    if ($currentTime - $serverRunningCache['timestamp'] < 5) {
+        return $serverRunningCache['status'];
+    }
+    
+    // 执行状态检查
     $screenCheck = shell_exec("screen -ls | grep factorio_server");
     $psCheck = shell_exec("pgrep -f 'factorio.*headless'");
-    return !empty($screenCheck) || !empty($psCheck);
+    $status = !empty($screenCheck) || !empty($psCheck);
+    
+    // 更新缓存
+    $serverRunningCache['status'] = $status;
+    $serverRunningCache['timestamp'] = $currentTime;
+    
+    return $status;
 }
 
 function handleModList() {
@@ -720,7 +1067,22 @@ function handlePlayerLists() {
 }
 
 function handleUpdateCheck() {
-    $json = @file_get_contents("https://factorio.com/api/latest-releases");
+    // 调试输出
+    error_log('handleUpdateCheck called');
+    
+    // 使用 cURL 获取版本信息
+    $ch = curl_init("https://factorio.com/api/latest-releases");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 10,
+        CURLOPT_SSL_VERIFYPEER => false
+    ]);
+    $json = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    error_log('cURL result: HTTP ' . $httpCode . ', Error: ' . $curlError);
+    curl_close($ch);
+    
     $data = json_decode($json, true) ?: [];
     
     $currentVersion = 'unknown';
@@ -731,26 +1093,28 @@ function handleUpdateCheck() {
         }
     }
     
-    echo json_encode([
+    $response = [
         'stable'       => $data['stable']['headless'] ?? 'unknown',
         'experimental' => $data['experimental']['headless'] ?? 'unknown',
-        'current'      => $currentVersion
-    ]);
+        'current'      => $currentVersion,
+        'http_code'    => $httpCode,
+        'api_response' => $json ? 'success' : 'failed'
+    ];
+    
+    echo json_encode($response);
 }
 
 function handleGetVersions() {
     $list = [];
-    if (file_exists($GLOBALS['binPath'])) {
-        $list[] = ['id'=>'default', 'name'=>'默认版本'];
-    }
     foreach (glob("{$GLOBALS['versionsDir']}/*", GLOB_ONLYDIR) as $d) {
+        $version = basename($d);
         $possiblePaths = [
             "$d/factorio/bin/x64/factorio",
             "$d/bin/x64/factorio"
         ];
         foreach ($possiblePaths as $binPath) {
             if (file_exists($binPath)) {
-                $list[] = ['id'=>basename($d), 'name'=>'v'.basename($d)];
+                $list[] = ['id'=>$version, 'name'=>'v'.$version];
                 break;
             }
         }
@@ -788,31 +1152,87 @@ function handleUpdateInstall() {
 
 function handleLogTail() {
     $lines   = max(100, min(10000, (int)($_GET['lines'] ?? 1000)));
-    $logFile = __DIR__ . '/factorio-current.log';
-    if (!file_exists($logFile) || filesize($logFile) === 0) {
-        echo "暂无日志";
+    $logFile = dirname(__DIR__) . '/factorio-current.log';
+    if (!file_exists($logFile)) {
+        echo "日志文件不存在: " . $logFile;
         exit;
     }
-    $fp = fopen($logFile, 'r');
-    if (!$fp) {
-        echo "无法读取日志文件";
+    if (filesize($logFile) === 0) {
+        echo "日志文件为空";
         exit;
     }
-    $buffer = '';
-    $pos    = -1;
-    $count  = 0;
-    $size   = filesize($logFile);
-    while ($count < $lines && -$pos < $size) {
-        fseek($fp, $pos, SEEK_END);
-        $char = fgetc($fp);
-        if ($char === "\n" || $char === "\r") {
-            if ($buffer !== '' || $count > 0) $count++;
-            if ($count >= $lines) break;
-        }
-        $buffer = $char . $buffer;
-        $pos--;
+    $content = file_get_contents($logFile);
+    if ($content === false) {
+        echo "读取文件失败";
+        exit;
     }
-    fclose($fp);
+    
+    $linesArray = explode("\n", $content);
+    $linesArray = array_filter($linesArray, function($line) {
+        return trim($line) !== '';
+    });
+    
+    $tailLines = array_slice($linesArray, -$lines);
+    $buffer = implode("\n", $tailLines);
+    
     echo $buffer ?: "日志为空";
+    exit;
+}
+
+function handleIpInfo() {
+    $ip = $_GET['ip'] ?? '';
+    if (empty($ip)) {
+        echo json_encode(['error' => '请提供IP地址']);
+        exit;
+    }
+    
+    // 验证IP地址格式
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        echo json_encode(['error' => '无效的IP地址']);
+        exit;
+    }
+    
+    // 使用免费的IP地址查询API
+    // 使用ip-api.com（免费，每分钟45次请求限制）
+    $url = "http://ip-api.com/json/{$ip}?lang=zh-CN";
+    
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 10,
+        CURLOPT_FOLLOWLOCATION => true
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200 || empty($response)) {
+        echo json_encode(['error' => '查询失败，请稍后重试']);
+        exit;
+    }
+    
+    $data = json_decode($response, true);
+    
+    if ($data['status'] === 'fail') {
+        echo json_encode(['error' => $data['message'] ?? '查询失败']);
+        exit;
+    }
+    
+    // 返回简化的信息
+    $result = [
+        'ip' => $ip,
+        'country' => $data['country'] ?? '',
+        'region' => $data['regionName'] ?? '',
+        'city' => $data['city'] ?? '',
+        'isp' => $data['isp'] ?? '',
+        'org' => $data['org'] ?? '',
+        'as' => $data['as'] ?? '',
+        'timezone' => $data['timezone'] ?? '',
+        'lat' => $data['lat'] ?? '',
+        'lon' => $data['lon'] ?? ''
+    ];
+    
+    echo json_encode($result);
     exit;
 }

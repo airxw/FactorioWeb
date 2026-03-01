@@ -93,7 +93,7 @@ function bytesToGB($bytes) {
     return round($bytes / (1024 * 1024 * 1024), 1);
 }
 
-// === 执行数据收集 ===
+// 执行数据收集
 
 $cpuInfo = getCpuInfo();
 $cpuUsage = getCpuUsage();
@@ -103,7 +103,29 @@ $sys = getLoadUptime();
 $diskTotal = disk_total_space(__DIR__);
 $diskFree = disk_free_space(__DIR__);
 $diskUsed = $diskTotal - $diskFree;
-$isAppRunning = !empty(shell_exec("screen -ls | grep factorio_server"));
+
+// 服务器状态检查（使用缓存）
+$cacheFile = __DIR__ . '/.server_status_cache';
+$isAppRunning = false;
+
+// 检查缓存是否有效（5秒内）
+if (file_exists($cacheFile)) {
+    $cacheData = json_decode(file_get_contents($cacheFile), true);
+    if ($cacheData && time() - $cacheData['timestamp'] < 5) {
+        $isAppRunning = $cacheData['status'];
+    }
+}
+
+// 如果缓存无效，执行状态检查
+if (!$isAppRunning) {
+    $isAppRunning = !empty(shell_exec("screen -ls | grep factorio_server"));
+    
+    // 更新缓存
+    file_put_contents($cacheFile, json_encode([
+        'status' => $isAppRunning,
+        'timestamp' => time()
+    ]));
+}
 
 // 输出 JSON
 echo json_encode([

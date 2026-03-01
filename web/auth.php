@@ -165,3 +165,16 @@ function getCurrentUser() {
         'role' => $_SESSION['user_role'] ?? null
     ];
 }
+
+/**
+ * 检查当前用户是否为管理员
+ * 
+ * @return bool 是否为管理员
+ */
+function isAdmin() {
+    if (!isLoggedIn()) {
+        return false;
+    }
+    
+    return ($_SESSION['user_role'] ?? '') === 'admin';
+}

@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factorio 游戏日志分析</title>
+    <link rel="stylesheet" href="static/lib/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="static/lib/bootstrap/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --primary-light: #60a5fa;
+            --success: #10b981;
+            --success-light: #34d399;
+            --danger: #ef4444;
+            --danger-light: #f87171;
+            --warning: #f59e0b;
+            --warning-light: #fbbf24;
+            --info: #06b6d4;
+            --info-light: #22d3ee;
+            --bg-body: #f3f4f6;
+            --bg-sidebar: #ffffff;
+            --bg-card: #ffffff;
+            --bg-input: #ffffff;
+            --bg-input-border: #e5e7eb;
+            --border-color: #e5e7eb;
+            --text-primary: #374151;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --sidebar-width: 320px;
+        }
+        
+        body, html {
+            height: 100%;
+            margin: 0;
+            background: var(--bg-body);
+            font-family: 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+        
+        .layout-container {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+        
+        .sidebar {
+            width: var(--sidebar-width);
+            min-width: var(--sidebar-width);
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 20;
+            box-shadow: 4px 0 12px rgba(0,0,0,0.02);
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar-header {
+            padding: 0 24px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-sidebar) 100%);
+        }
+        
+        .sidebar-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            background: var(--bg-sidebar);
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            background: var(--bg-body);
+        }
+        
+        .card {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            background: var(--bg-card);
+            margin-bottom: 16px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+        
+        .card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-body) 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 16px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        
+        .card-body {
+            padding: 16px;
+        }
+        
+        .nav-pills .nav-link {
+            color: var(--text-secondary);
+            font-weight: 500;
+            border-radius: 8px;
+            padding: 10px 16px;
+            margin-right: 4px;
+            transition: all 0.2s;
+        }
+        
+        .nav-pills .nav-link:hover {
+            background: var(--bg-body);
+            color: var(--text-primary);
+        }
+        
+        .nav-pills .nav-link.active {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            color: #ffffff;
+            font-weight: 600;
+        }
+        
+        .btn {
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border: none;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 8px;
+            border: 2px solid var(--bg-input-border);
+            background: var(--bg-input);
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(59,130,246,0.1);
+        }
+        
+        .log-container {
+            flex: 1;
+            background: var(--bg-card);
+            position: relative;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        
+        .log-header {
+            height: 56px;
+            background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-body) 100%);
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            justify-content: space-between;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+        }
+        
+        .log-body {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        
+        .log-content {
+            padding: 16px;
+            font-family: 'Consolas', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            word-wrap: break-word;
+            transition: all 0.2s ease;
+        }
+        
+        .log-entry:hover {
+            transform: translateX(4px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .log-entry.chat {
+            background-color: #e7f3ff;
+            border-left: 4px solid #0066cc;
+        }
+        
+        .log-entry.login {
+            background-color: #e8f5e8;
+            border-left: 4px solid #28a745;
+        }
+        
+        .log-entry.save {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .log-entry.error {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .log-entry.warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .log-entry.info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+        }
+        
+        .log-time {
+            color: #6c757d;
+            margin-right: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .log-message {
+            color: var(--text-primary);
+        }
+        
+        .ip-link {
+            color: #0d6efd;
+            cursor: pointer;
+            text-decoration: underline;
+            font-weight: 500;
+        }
+        
+        .ip-link:hover {
+            color: #0a58ca;
+            text-decoration: none;
+        }
+        
+        .log-filter.active {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 20px;
+            border-radius: 12px;
+            background: var(--bg-card);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+        }
+        
+        .stats-card .stats-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+        
+        .stats-card .stats-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .player-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .player-item:hover {
+            background: var(--bg-body);
+        }
+        
+        .player-item:last-child {
+            border-bottom: none;
+        }
+        
+        .player-name {
+            font-weight: 500;
+        }
+        
+        .player-join-time {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+        
+        .d-none {
+            display: none !important;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-body);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+        
+        @media (max-width: 992px) {
+            body, html {
+                overflow: auto;
+            }
+            
+            .layout-container {
+                flex-direction: column;
+                height: auto;
+                min-height: 100vh;
+            }
+            
+            .sidebar {
+                width: 100%;
+                min-width: 100%;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+            
+            .sidebar-body {
+                max-height: 400px;
+            }
+            
+            .main-content {
+                min-height: 600px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="d-flex align-items-center text-primary">
+                    <i class="bi bi-justify-left fs-4 me-2"></i>
+                    <span class="fw-bold fs-5">日志分析</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="location.href='index.html'" title="返回控制台">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="logout()" title="退出登录">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="sidebar-body">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-funnel me-2"></i>日志过滤
+                    </div>
+                    <div class="card-body">
+                        <div class="btn-group-vertical w-100">
+                            <button class="btn btn-sm btn-outline-secondary log-filter mb-2" data-filter="all">
+                                <i class="bi bi-record-circle me-2"></i>全部日志
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary log-filter mb-2" data-filter="chat">
+                                <i class="bi bi-chat-dots me-2"></i>聊天消息
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary log-filter mb-2" data-filter="login">
+                                <i class="bi bi-person-check me-2"></i>登录事件
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary log-filter mb-2" data-filter="save">
+                                <i class="bi bi-save me-2"></i>存档操作
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary log-filter mb-2" data-filter="error">
+                                <i class="bi bi-exclamation-circle me-2"></i>错误信息
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary log-filter" data-filter="warning">
+                                <i class="bi bi-exclamation-triangle me-2"></i>警告信息
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-search me-2"></i>关键词搜索
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <input type="text" id="keyword-search" class="form-control form-control-sm" placeholder="输入关键词...">
+                            <button class="btn btn-sm btn-primary" onclick="searchLogs()">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-clock me-2"></i>时间范围
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">开始时间</label>
+                            <input type="datetime-local" id="time-start" class="form-control form-control-sm">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">结束时间</label>
+                            <input type="datetime-local" id="time-end" class="form-control form-control-sm">
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="filterByTime()">
+                            <i class="bi bi-filter me-2"></i>应用过滤
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-gear me-2"></i>分析设置
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">显示行数</label>
+                            <select id="line-count" class="form-select form-select-sm">
+                                <option value="100">100行</option>
+                                <option value="500" selected>500行</option>
+                                <option value="1000">1000行</option>
+                                <option value="5000">5000行</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">日志刷新</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="auto-refresh">
+                                <label class="form-check-label" for="auto-refresh">
+                                    自动刷新 (10秒)
+                                </label>
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary w-100 mb-2" onclick="loadLogs()">
+                            <i class="bi bi-arrow-repeat me-2"></i>重新加载
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger w-100" onclick="clearLogViewer()">
+                            <i class="bi bi-trash me-2"></i>清空显示
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="log-container">
+                <div class="log-header">
+                    <div>
+                        <i class="bi bi-justify-left me-2 text-info"></i>
+                        <span id="log-view-title">Factorio 游戏日志分析</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="exportLogs()">
+                            <i class="bi bi-download me-2"></i>导出
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="showStats()">
+                            <i class="bi bi-bar-chart me-2"></i>统计
+                        </button>
+                        <span id="log-status" class="badge bg-secondary">加载中...</span>
+                    </div>
+                </div>
+                <div class="log-body">
+                    <div class="log-content" id="log-content">
+                        <div class="text-center text-muted py-8">
+                            <i class="bi bi-hourglass-split fs-3 mb-3"></i>
+                            <p>正在加载日志数据...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card m-4" id="stats-card" style="display: none;">
+                <div class="card-header">
+                    <i class="bi bi-bar-chart me-2"></i>日志统计分析
+                    <button class="btn btn-sm btn-outline-secondary float-end" onclick="$('#stats-card').hide()">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <div class="stats-value" id="stat-total">0</div>
+                                <div class="stats-label">总日志数</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <div class="stats-value" id="stat-chat">0</div>
+                                <div class="stats-label">聊天消息</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <div class="stats-value" id="stat-login">0</div>
+                                <div class="stats-label">登录事件</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <div class="stats-value" id="stat-error">0</div>
+                                <div class="stats-label">错误信息</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h6 class="fw-bold mb-3">活跃玩家</h6>
+                        <div class="player-list" id="player-list">
+                            <div class="text-center text-muted">暂无数据</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast-container"></div>
+    
+    <script src="static/lib/bootstrap/js/bootstrap.bundle.js"></script>
+    <script src="static/lib/jquery-3.6.0.min.js"></script>
+    
+    <script>
+        let logEntries = [];
+        let currentFilter = 'all';
+        let autoRefreshInterval = null;
+        
+        async function checkAuth() {
+            try {
+                const res = await fetch('api.php?action=check_auth');
+                const d = await res.json();
+                if (!d.authenticated) {
+                    window.location.href = 'login.html';
+                }
+            } catch (e) {
+                window.location.href = 'login.html';
+            }
+        }
+        
+        function logout() {
+            if (confirm('确定要退出登录吗？')) {
+                fetch('api.php?action=logout', { method: 'POST' })
+                    .then(() => window.location.href = 'login.html');
+            }
+        }
+        
+        function showToast(msg, type='info') {
+            const bg = type==='error'?'bg-danger':type==='success'?'bg-success':'bg-primary';
+            const t = document.createElement('div');
+            t.className = `toast align-items-center text-white ${bg} border-0 show mb-2`;
+            t.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+            document.getElementById('toast-container').appendChild(t);
+            new bootstrap.Toast(t).show();
+            setTimeout(() => t.remove(), 3000);
+        }
+        
+        function parseLogLine(line) {
+            let type = 'info';
+            let message = line;
+            let timestamp = '';
+            let player = null;
+            let ip = null;
+            
+            // 提取时间戳
+            const timeMatch = line.match(/^(\d+\.\d+|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+            if (timeMatch) {
+                timestamp = timeMatch[1];
+            }
+            
+            // 清理重复的时间戳（原始日志可能包含重复的时间戳）
+            if (timestamp) {
+                // 移除开头的第一个时间戳
+                message = message.replace(new RegExp(`^${timestamp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), '');
+                // 移除可能存在的第二个重复时间戳
+                message = message.replace(new RegExp(`^${timestamp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), '');
+            }
+            
+            // 提取IP地址 - 使用更精确的正则表达式匹配IP地址格式
+            let ipMatch = line.match(/IP ADDR:\(\{(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\}\)/);
+            if (!ipMatch) {
+                ipMatch = line.match(/来自\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+的连接请求/);
+            }
+            if (ipMatch) {
+                ip = ipMatch[1];
+            }
+            
+            // 提取玩家名 - 修改正则表达式以匹配实际格式
+            const playerMatch = line.match(/username\s*\(([^)]+)\)/) || 
+                              line.match(/(\w+)\s+上线/) || 
+                              line.match(/\[JOIN\]\s*(\w+)/);
+            if (playerMatch) {
+                player = playerMatch[1];
+            }
+            
+            // 分类日志
+            if (line.includes('[CHAT]')) {
+                type = 'chat';
+            } else if (line.includes('[JOIN]') || line.includes('PlayerJoinGame') || line.includes('ConnectionRequestReplyConfirm') || line.includes('上线')) {
+                type = 'login';
+            } else if (line.includes('Serving map') || line.includes('saving map') || line.includes('save')) {
+                type = 'save';
+            } else if (line.includes('Error') || line.includes('error') || line.includes('Refusing connection')) {
+                type = 'error';
+            } else if (line.includes('Warning') || line.includes('warning')) {
+                type = 'warning';
+            }
+            
+            return {
+                type,
+                message,
+                timestamp,
+                player,
+                ip,
+                raw: line
+            };
+        }
+        
+        function addLogEntry(entry) {
+            if (!entry) return;
+            
+            logEntries.push(entry);
+            
+            if (currentFilter === 'all' || entry.type === currentFilter) {
+                const logContent = document.getElementById('log-content');
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${entry.type}`;
+                logEntry.dataset.type = entry.type;
+                logEntry.dataset.timestamp = entry.timestamp;
+                if (entry.player) {
+                    logEntry.dataset.player = entry.player;
+                }
+                
+                // 处理消息中的IP地址，添加点击事件
+                let message = entry.message;
+                if (entry.ip) {
+                    // 将IP地址包装成可点击的元素
+                    message = message.replace(
+                        new RegExp(`\\{(${entry.ip})\\}`, 'g'),
+                        '<span class="ip-link" data-ip="$1" onclick="showIpInfo(\'$1\')">{$1}</span>'
+                    );
+                }
+                
+                logEntry.innerHTML = `
+                    <span class="log-time">${entry.timestamp}</span>
+                    <span class="log-message">${message}</span>
+                `;
+                
+                logContent.appendChild(logEntry);
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+        }
+        
+        async function showIpInfo(ip) {
+            // 创建或获取IP信息显示框
+            let ipInfoBox = document.getElementById('ip-info-box');
+            if (!ipInfoBox) {
+                ipInfoBox = document.createElement('div');
+                ipInfoBox.id = 'ip-info-box';
+                ipInfoBox.className = 'ip-info-box';
+                ipInfoBox.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 10000; max-width: 400px; width: 90%;';
+                document.body.appendChild(ipInfoBox);
+            }
+            
+            // 显示加载中
+            ipInfoBox.innerHTML = `
+                <div style="text-align: center;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>正在查询IP信息...</p>
+                </div>
+                <button onclick="hideIpInfoBox()" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
+            `;
+            ipInfoBox.style.display = 'block';
+            
+            try {
+                const response = await fetch(`api.php?action=ip_info&ip=${ip}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    ipInfoBox.innerHTML = `
+                        <h5 style="margin-bottom: 15px;">IP地址信息</h5>
+                        <p style="color: red;">${data.error}</p>
+                        <button onclick="hideIpInfoBox()" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
+                    `;
+                } else {
+                    ipInfoBox.innerHTML = `
+                        <h5 style="margin-bottom: 15px;">IP地址信息</h5>
+                        <div style="font-size: 14px; line-height: 1.8;">
+                            <p><strong>IP地址:</strong> ${data.ip}</p>
+                            <p><strong>国家/地区:</strong> ${data.country}</p>
+                            <p><strong>省份:</strong> ${data.region}</p>
+                            <p><strong>城市:</strong> ${data.city}</p>
+                            <p><strong>运营商:</strong> ${data.isp}</p>
+                            <p><strong>组织:</strong> ${data.org}</p>
+                            <p><strong>ASN:</strong> ${data.as}</p>
+                            <p><strong>时区:</strong> ${data.timezone}</p>
+                            <p><strong>坐标:</strong> ${data.lat}, ${data.lon}</p>
+                        </div>
+                        <button onclick="hideIpInfoBox()" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
+                    `;
+                }
+            } catch (e) {
+                ipInfoBox.innerHTML = `
+                    <h5 style="margin-bottom: 15px;">IP地址信息</h5>
+                    <p style="color: red;">查询失败: ${e.message}</p>
+                    <button onclick="hideIpInfoBox()" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
+                `;
+            }
+        }
+        
+        function hideIpInfoBox() {
+            const ipInfoBox = document.getElementById('ip-info-box');
+            if (ipInfoBox) {
+                ipInfoBox.style.display = 'none';
+            }
+        }
+        
+        function filterLogEntries(filter) {
+            currentFilter = filter;
+            const logContent = document.getElementById('log-content');
+            logContent.innerHTML = '';
+            
+            // 更新按钮状态
+            document.querySelectorAll('.log-filter').forEach(btn => {
+                if (btn.dataset.filter === filter) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            // 重新显示过滤后的日志
+            logEntries.forEach(entry => {
+                if (filter === 'all' || entry.type === filter) {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = `log-entry ${entry.type}`;
+                    logEntry.dataset.type = entry.type;
+                    logEntry.dataset.timestamp = entry.timestamp;
+                    if (entry.player) {
+                        logEntry.dataset.player = entry.player;
+                    }
+                    
+                    logEntry.innerHTML = `
+                        <span class="log-time">${entry.timestamp}</span>
+                        <span class="log-message">${entry.message}</span>
+                    `;
+                    
+                    logContent.appendChild(logEntry);
+                }
+            });
+            
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+        
+        function searchLogs() {
+            const keyword = document.getElementById('keyword-search').value.toLowerCase().trim();
+            const logContent = document.getElementById('log-content');
+            logContent.innerHTML = '';
+            
+            if (!keyword) {
+                filterLogEntries(currentFilter);
+                return;
+            }
+            
+            const matchingEntries = logEntries.filter(entry => 
+                entry.message.toLowerCase().includes(keyword) || 
+                (entry.player && entry.player.toLowerCase().includes(keyword))
+            );
+            
+            matchingEntries.forEach(entry => {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${entry.type}`;
+                
+                // 高亮关键词
+                let highlightedMessage = entry.message;
+                if (keyword) {
+                    const regex = new RegExp(`(${keyword})`, 'gi');
+                    highlightedMessage = highlightedMessage.replace(regex, '<mark>$1</mark>');
+                }
+                
+                logEntry.innerHTML = `
+                    <span class="log-time">${entry.timestamp}</span>
+                    <span class="log-message">${highlightedMessage}</span>
+                `;
+                
+                logContent.appendChild(logEntry);
+            });
+            
+            if (matchingEntries.length === 0) {
+                logContent.innerHTML = '<div class="text-center text-muted py-4">未找到匹配的日志</div>';
+            }
+            
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+        
+        function filterByTime() {
+            const startTime = document.getElementById('time-start').value;
+            const endTime = document.getElementById('time-end').value;
+            const logContent = document.getElementById('log-content');
+            logContent.innerHTML = '';
+            
+            if (!startTime && !endTime) {
+                filterLogEntries(currentFilter);
+                return;
+            }
+            
+            const filteredEntries = logEntries.filter(entry => {
+                if (!entry.timestamp) return false;
+                
+                // 简化的时间比较（实际项目中需要更精确的处理）
+                const entryTime = new Date(entry.timestamp.replace(/(\d+\.\d+)/, (match) => {
+                    // 处理游戏内时间格式
+                    return new Date().toISOString().split('T')[0] + ' ' + match.replace('.', ':');
+                }));
+                
+                if (startTime) {
+                    const start = new Date(startTime);
+                    if (entryTime < start) return false;
+                }
+                
+                if (endTime) {
+                    const end = new Date(endTime);
+                    if (entryTime > end) return false;
+                }
+                
+                return true;
+            });
+            
+            filteredEntries.forEach(entry => {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${entry.type}`;
+                
+                logEntry.innerHTML = `
+                    <span class="log-time">${entry.timestamp}</span>
+                    <span class="log-message">${entry.message}</span>
+                `;
+                
+                logContent.appendChild(logEntry);
+            });
+            
+            if (filteredEntries.length === 0) {
+                logContent.innerHTML = '<div class="text-center text-muted py-4">该时间范围内无日志</div>';
+            }
+            
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+        
+        function clearLogViewer() {
+            logEntries = [];
+            document.getElementById('log-content').innerHTML = '';
+            document.getElementById('log-status').textContent = '已清空';
+            document.getElementById('log-status').className = 'badge bg-info';
+        }
+        
+        function exportLogs() {
+            const content = logEntries.map(entry => entry.raw).join('\n');
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `factorio-logs-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('日志导出成功', 'success');
+        }
+        
+        function showStats() {
+            const statsCard = document.getElementById('stats-card');
+            const statTotal = document.getElementById('stat-total');
+            const statChat = document.getElementById('stat-chat');
+            const statLogin = document.getElementById('stat-login');
+            const statError = document.getElementById('stat-error');
+            const playerList = document.getElementById('player-list');
+            
+            // 计算统计数据
+            const total = logEntries.length;
+            const chat = logEntries.filter(entry => entry.type === 'chat').length;
+            const login = logEntries.filter(entry => entry.type === 'login').length;
+            const error = logEntries.filter(entry => entry.type === 'error').length;
+            
+            statTotal.textContent = total;
+            statChat.textContent = chat;
+            statLogin.textContent = login;
+            statError.textContent = error;
+            
+            // 提取唯一玩家
+            const players = {};
+            logEntries.forEach(entry => {
+                if (entry.player) {
+                    if (!players[entry.player]) {
+                        players[entry.player] = {
+                            name: entry.player,
+                            joinTime: entry.timestamp,
+                            count: 0
+                        };
+                    }
+                    players[entry.player].count++;
+                }
+            });
+            
+            // 显示玩家列表
+            playerList.innerHTML = '';
+            if (Object.keys(players).length > 0) {
+                Object.values(players).forEach(player => {
+                    const playerItem = document.createElement('div');
+                    playerItem.className = 'player-item';
+                    playerItem.innerHTML = `
+                        <div>
+                            <div class="player-name">${player.name}</div>
+                            <div class="player-join-time">加入时间: ${player.joinTime}</div>
+                        </div>
+                        <div class="text-muted small">${player.count} 次活动</div>
+                    `;
+                    playerList.appendChild(playerItem);
+                });
+            } else {
+                playerList.innerHTML = '<div class="text-center text-muted">暂无玩家数据</div>';
+            }
+            
+            statsCard.style.display = 'block';
+        }
+        
+        async function loadLogs() {
+            const logContent = document.getElementById('log-content');
+            const logStatus = document.getElementById('log-status');
+            const lineCount = document.getElementById('line-count').value;
+            
+            logContent.innerHTML = '<div class="text-center text-muted py-8"><i class="bi bi-hourglass-split fs-3 mb-3"></i><p>正在加载日志数据...</p></div>';
+            logStatus.textContent = '加载中...';
+            logStatus.className = 'badge bg-secondary';
+            
+            try {
+                const res = await fetch(`api.php?action=log_tail&lines=${lineCount}`);
+                const text = await res.text();
+                
+                logEntries = [];
+                logContent.innerHTML = '';
+                
+                if (text.trim()) {
+                    const lines = text.split('\n');
+                    const parsedEntries = [];
+                    
+                    // 先解析所有日志
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            const entry = parseLogLine(line);
+                            if (entry) {
+                                parsedEntries.push(entry);
+                            }
+                        }
+                    });
+                    
+                    // 合并相关日志
+                    const mergedEntries = mergeRelatedLogs(parsedEntries);
+                    
+                    // 添加合并后的日志
+                    mergedEntries.forEach(entry => {
+                        addLogEntry(entry);
+                    });
+                    
+                    logStatus.textContent = `已加载 ${mergedEntries.length} 条日志`;
+                    logStatus.className = 'badge bg-success';
+                    showToast(`成功加载 ${mergedEntries.length} 条日志`, 'success');
+                } else {
+                    logContent.innerHTML = '<div class="text-center text-muted py-4">暂无日志数据</div>';
+                    logStatus.textContent = '无日志';
+                    logStatus.className = 'badge bg-info';
+                }
+            } catch (e) {
+                logContent.innerHTML = '<div class="text-center text-danger py-4">加载日志失败</div>';
+                logStatus.textContent = '加载失败';
+                logStatus.className = 'badge bg-danger';
+                showToast('加载日志失败: ' + e.message, 'error');
+            }
+        }
+        
+        function mergeRelatedLogs(entries) {
+            const merged = [];
+            const playerGroups = {};
+            const ipToPlayer = {};
+            
+            // 首先处理所有日志，提取玩家名和IP地址
+            entries.forEach(entry => {
+                // 提取玩家名
+                let player = entry.player;
+                if (!player) {
+                    const playerMatch = entry.message.match(/username\s*\(([^)]+)\)/) || 
+                                      entry.message.match(/(\w+)\s+上线/) ||
+                                      entry.message.match(/(\w+)\s+下线/) ||
+                                      entry.message.match(/\[JOIN\]\s*(\w+)/) ||
+                                      entry.message.match(/\[LEAVE\]\s*(\w+)/);
+                    if (playerMatch) {
+                        player = playerMatch[1];
+                        entry.player = player;
+                    }
+                }
+                
+                // 提取IP地址
+                let ip = entry.ip;
+                if (!ip) {
+                    let ipMatch = entry.message.match(/IP ADDR:\(\{(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\}\)/);
+                    if (!ipMatch) {
+                        ipMatch = entry.message.match(/来自\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+的连接请求/);
+                    }
+                    if (ipMatch) {
+                        ip = ipMatch[1];
+                        entry.ip = ip;
+                    }
+                }
+            });
+            
+            // 建立玩家名到IP地址的映射（从Refusing connection等日志中提取）
+            entries.forEach(entry => {
+                // 如果日志同时包含玩家名和IP地址，建立双向映射
+                if (entry.player && entry.ip) {
+                    ipToPlayer[entry.ip] = entry.player;
+                }
+            });
+            
+            // 建立玩家名到IP地址的映射（通过时间关联）
+            const playerToIp = {};
+            entries.forEach(entry => {
+                if (entry.player && entry.ip) {
+                    playerToIp[entry.player] = entry.ip;
+                }
+            });
+            
+            // 按时间排序所有日志
+            entries.sort((a, b) => {
+                if (a.timestamp && b.timestamp) {
+                    return a.timestamp.localeCompare(b.timestamp);
+                }
+                return 0;
+            });
+            
+            // 处理所有连接相关日志
+            entries.forEach(entry => {
+                // 过滤掉PlayerJoinGame日志（这类日志不需要显示）
+                if (entry.message.includes('PlayerJoinGame')) {
+                    return; // 跳过这条日志
+                }
+                
+                // 检查是否是连接相关日志
+                if (entry.message.includes('连接请求') || 
+                    entry.message.includes('Refusing connection') || 
+                    entry.message.includes('上线') ||
+                    entry.message.includes('[JOIN]') ||
+                    entry.message.includes('[LEAVE]') ||
+                    entry.message.includes('下线') ||
+                    entry.message.includes('ConnectionRequestReplyConfirm')) {
+                    
+                    // 提取玩家名
+                    let player = entry.player;
+                    if (!player) {
+                        const playerMatch = entry.message.match(/username\s*\(([^)]+)\)/) || 
+                                          entry.message.match(/(\w+)\s+上线/) ||
+                                          entry.message.match(/(\w+)\s+下线/) ||
+                                          entry.message.match(/\[JOIN\]\s*(\w+)/) ||
+                                          entry.message.match(/\[LEAVE\]\s*(\w+)/);
+                        if (playerMatch) {
+                            player = playerMatch[1];
+                            entry.player = player;
+                        }
+                    }
+                    
+                    // 提取IP地址
+                    let ip = entry.ip;
+                    if (!ip) {
+                        let ipMatch = entry.message.match(/IP ADDR:\(\{(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\}\)/);
+                        if (!ipMatch) {
+                            ipMatch = entry.message.match(/来自\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+的连接请求/);
+                        }
+                        if (ipMatch) {
+                            ip = ipMatch[1];
+                            entry.ip = ip;
+                        }
+                    }
+                    
+                    // 如果没有玩家名，尝试从IP映射中获取
+                    if (!player && ip && ipToPlayer[ip]) {
+                        player = ipToPlayer[ip];
+                        entry.player = player;
+                    }
+                    
+                    // 尝试通过玩家名获取IP地址（如果当前日志没有IP但有玩家名）
+                    if (!ip && player && playerToIp[player]) {
+                        ip = playerToIp[player];
+                        entry.ip = ip;
+                    }
+                    
+                    // 即使没有玩家名，也尝试按IP分组
+                    let groupKey = player || ip || 'unknown';
+                    
+                    if (!playerGroups[groupKey]) {
+                        playerGroups[groupKey] = {
+                            player: player,
+                            ip: ip,
+                            messages: [],
+                            timestamps: []
+                        };
+                    }
+                    
+                    // 更新IP地址（如果有）
+                    if (ip) {
+                        playerGroups[groupKey].ip = ip;
+                    }
+                    
+                    // 更新玩家名（如果有）
+                    if (player) {
+                        playerGroups[groupKey].player = player;
+                    }
+                    
+                    // 添加消息和时间戳
+                    playerGroups[groupKey].messages.push(entry.message);
+                    if (entry.timestamp) {
+                        playerGroups[groupKey].timestamps.push(entry.timestamp);
+                    }
+                } else {
+                    // 非连接相关日志直接添加
+                    merged.push(entry);
+                }
+            });
+            
+            // 处理所有玩家组
+            Object.values(playerGroups).forEach(group => {
+                // 找到最新的时间戳
+                let latestTimestamp = '';
+                if (group.timestamps.length > 0) {
+                    // 按时间戳排序，取最后一个
+                    group.timestamps.sort();
+                    latestTimestamp = group.timestamps[group.timestamps.length - 1];
+                }
+                
+                // 检查是否包含上线或下线信息
+                const hasJoin = group.messages.some(msg => msg.includes('上线') || msg.includes('[JOIN]'));
+                const hasLeave = group.messages.some(msg => msg.includes('下线') || msg.includes('[LEAVE]'));
+                
+                // 只合并有玩家名的组
+                if (group.player) {
+                    if (hasJoin) {
+                        // 生成合并后的上线消息（不包含时间戳，避免重复显示）
+                        let mergedMessage = `${group.player} `;
+                        if (group.ip) {
+                            mergedMessage += `在{${group.ip}}上线`;
+                        } else {
+                            mergedMessage += '上线';
+                        }
+                        
+                        // 创建合并后的日志条目
+                        const mergedEntry = {
+                            type: 'login',
+                            message: mergedMessage,
+                            timestamp: latestTimestamp,
+                            player: group.player,
+                            ip: group.ip,
+                            raw: group.messages.join('\n')
+                        };
+                        
+                        merged.push(mergedEntry);
+                    } else if (hasLeave) {
+                        // 生成合并后的下线消息（不包含时间戳，避免重复显示）
+                        let mergedMessage = `${group.player} 下线`;
+                        
+                        // 创建合并后的日志条目
+                        const mergedEntry = {
+                            type: 'info',
+                            message: mergedMessage,
+                            timestamp: latestTimestamp,
+                            player: group.player,
+                            ip: group.ip,
+                            raw: group.messages.join('\n')
+                        };
+                        
+                        merged.push(mergedEntry);
+                    }
+                } else {
+                    // 没有玩家名的组，将消息直接添加
+                    group.messages.forEach(msg => {
+                        // 过滤掉PlayerJoinGame日志
+                        if (msg.includes('PlayerJoinGame')) {
+                            return;
+                        }
+                        merged.push({
+                            type: 'info',
+                            message: msg,
+                            timestamp: latestTimestamp,
+                            player: null,
+                            ip: group.ip,
+                            raw: msg
+                        });
+                    });
+                }
+            });
+            
+            // 按时间戳排序最终结果
+            merged.sort((a, b) => {
+                if (a.timestamp && b.timestamp) {
+                    return a.timestamp.localeCompare(b.timestamp);
+                }
+                return 0;
+            });
+            
+            return merged;
+        }
+        
+        function setupAutoRefresh() {
+            const autoRefresh = document.getElementById('auto-refresh');
+            
+            autoRefresh.addEventListener('change', function() {
+                if (this.checked) {
+                    if (autoRefreshInterval) {
+                        clearInterval(autoRefreshInterval);
+                    }
+                    autoRefreshInterval = setInterval(loadLogs, 10000);
+                    showToast('已启用自动刷新', 'info');
+                } else {
+                    if (autoRefreshInterval) {
+                        clearInterval(autoRefreshInterval);
+                        autoRefreshInterval = null;
+                    }
+                    showToast('已禁用自动刷新', 'info');
+                }
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuth();
+            loadLogs();
+            setupAutoRefresh();
+            
+            // 绑定过滤按钮事件
+            document.querySelectorAll('.log-filter').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    filterLogEntries(this.dataset.filter);
+                });
+            });
+            
+            // 绑定搜索框回车事件
+            document.getElementById('keyword-search').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchLogs();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

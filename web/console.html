@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factorio Server - 控制台日志</title>
+    <link rel="stylesheet" href="static/lib/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="static/lib/xterm/css/xterm.css">
+    <link rel="stylesheet" href="static/lib/bootstrap/bootstrap-icons.css">
+    <link id="skin-style" rel="stylesheet" href="static/skins/default.css">
+    <link rel="stylesheet" href="static/css/main.css">
+    <style>
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .back-btn {
+            margin-bottom: 20px;
+        }
+        .term-container {
+            height: 80vh;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="bi bi-terminal me-2"></i>Factorio 服务端控制台</h1>
+            <a href="index.html" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-1"></i>返回控制面板
+            </a>
+        </div>
+        
+        <!-- 控制台 -->
+        <div class="term-container">
+            <div class="term-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="badge bg-secondary me-2" id="ws-badge">连接中断</span>
+                        <span class="text-muted small">Factorio 服务端控制台</span>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="clearTerminal(event)" title="清空">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="maximizeConsole(event)" title="最大化">
+                            <i class="bi bi-arrows-fullscreen"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="term-body"><div id="terminal"></div></div>
+        </div>
+    </div>
+
+    <script src="static/lib/bootstrap/js/bootstrap.bundle.js"></script>
+    <script src="static/lib/xterm/lib/xterm.js"></script>
+    <script src="static/lib/xterm/lib/xterm-addon-fit.js"></script>
+    <script src="static/lib/jquery-3.6.0.min.js"></script>
+    <script>
+        // 全局变量
+        let fitAddon = null;
+        let term = null;
+        let sse = null;
+        let historyLoaded = false;
+
+        // 初始化终端
+        document.addEventListener('DOMContentLoaded', function() {
+            // 创建终端
+            term = new Terminal({
+                fontSize: 12,
+                lineHeight: 1.2,
+                fontFamily: 'Consolas, Menlo, monospace',
+                theme: { background: '#1e1e1e', foreground: '#cccccc' },
+                cursorBlink: true,
+                scrollback: 100000,
+                convertEol: true
+            });
+
+            fitAddon = new FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+
+            // 打开终端
+            const box = document.getElementById('terminal');
+            term.open(box);
+            fitAddon.fit();
+
+            // 加载历史日志
+            loadHistory();
+            // 启动实时日志
+            startSSE();
+
+            // 窗口大小变化时调整终端大小
+            window.addEventListener('resize', () => setTimeout(() => fitAddon.fit(), 100));
+        });
+
+        // 加载历史日志
+        async function loadHistory() {
+            try {
+                const r = await fetch('api.php?action=log_tail&lines=1000');
+                const t = await r.text();
+                if (t.trim()) {
+                    term.write(t.replace(/\n/g, '\r\n'));
+                }
+                term.scrollToBottom();
+                historyLoaded = true;
+                badge('历史日志已加载', 'bg-info');
+            } catch (e) {
+                term.write('\r\n[提示] 暂无历史日志\r\n');
+            }
+        }
+
+        // 实时日志
+        function startSSE() {
+            if (sse) return;
+            sse = new EventSource('log_ws.php');
+
+            sse.onopen = () => badge('实时日志已连接', 'bg-success');
+
+            sse.onmessage = (e) => {
+                let line = e.data;
+                if (line.startsWith('data: ')) {
+                    line = line.substring(6);
+                }
+                if (line === '[CONNECTED] 实时日志已连接') return;
+
+                term.write(line + '\r\n');
+                if (historyLoaded) term.scrollToBottom();
+            };
+
+            sse.onerror = () => {
+                sse.close();
+                sse = null;
+                badge('实时日志断开（3秒后重连）', 'bg-danger');
+                setTimeout(startSSE, 3000);
+            };
+        }
+
+        // 清屏
+        term.clear = () => term.reset();
+
+        function clearTerminal(event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            if (term && typeof term.clear === 'function') {
+                term.clear();
+            }
+        }
+
+        function maximizeConsole(event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            const container = document.querySelector('.term-container');
+            const maximizeBtn = event.currentTarget;
+            
+            if (container.classList.contains('maximized')) {
+                container.classList.remove('maximized');
+                maximizeBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i>';
+            } else {
+                container.classList.add('maximized');
+                maximizeBtn.innerHTML = '<i class="bi bi-arrows-shrink"></i>';
+            }
+            
+            setTimeout(() => {
+                try {
+                    if (fitAddon && typeof fitAddon.fit === 'function') {
+                        fitAddon.fit();
+                    }
+                } catch (e) {
+                    console.error('fitAddon.fit() failed:', e);
+                }
+            }, 350);
+        }
+
+        function badge(text, cls) {
+            const b = document.getElementById('ws-badge');
+            if (b) {
+                b.textContent = text;
+                b.className = `badge ${cls} me-3`;
+            }
+        }
+    </script>
+</body>
+</html>
