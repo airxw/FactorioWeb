@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>控制面板 - Factorio Server Pro</title>
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/bootstrap-icons.css">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+        }
+        body {
+            background: #f8f9fa;
+            min-height: 100vh;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            z-index: 1000;
+        }
+        .sidebar-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .sidebar-nav {
+            padding: 1rem 0;
+        }
+        .sidebar-nav-item {
+            display: block;
+            padding: 0.75rem 1.5rem;
+            color: rgba(255,255,255,0.7);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .sidebar-nav-item:hover,
+        .sidebar-nav-item.active {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        .sidebar-nav-item i {
+            width: 20px;
+            margin-right: 10px;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 2rem;
+        }
+        .stat-card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+            height: 100%;
+            min-height: 120px;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        .stat-card .card-body {
+            display: flex;
+            align-items: center;
+            padding: 1.25rem;
+        }
+        .stat-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+        .stat-content {
+            flex-grow: 1;
+            min-width: 0;
+        }
+        .stat-label {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-bottom: 0.25rem;
+        }
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .server-card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+            cursor: pointer;
+            height: 100%;
+            min-height: 160px;
+        }
+        .server-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        .server-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .server-status.running { background: #28a745; }
+        .server-status.stopped { background: #6c757d; }
+        .resource-bar {
+            height: 6px;
+            border-radius: 3px;
+            background: #e9ecef;
+            overflow: hidden;
+        }
+        .resource-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        .add-server-card {
+            border: 2px dashed #dee2e6;
+            border-radius: 1rem;
+            background: transparent;
+            min-height: 160px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .add-server-card:hover {
+            border-color: #0d6efd;
+            background: rgba(13, 110, 253, 0.05);
+        }
+        .system-resource-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .system-resource-card .stat-label {
+            color: rgba(255,255,255,0.8);
+        }
+        .system-resource-card .stat-value {
+            color: white;
+        }
+        .user-dropdown {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            right: 1rem;
+        }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-hdd-rack-fill fs-4 me-2"></i>
+            <span class="fw-bold fs-5">Factorio Pro</span>
+        </div>
+    </div>
+    
+    <nav class="sidebar-nav">
+        <a href="#" class="sidebar-nav-item active" data-nav="dashboard">
+            <i class="bi bi-grid-1x2"></i>控制面板
+        </a>
+        <a href="#" class="sidebar-nav-item" data-nav="servers">
+            <i class="bi bi-server"></i>服务器列表
+        </a>
+        <a href="#" class="sidebar-nav-item" data-nav="monitor">
+            <i class="bi bi-activity"></i>资源监控
+        </a>
+        <a href="#" class="sidebar-nav-item" data-nav="settings">
+            <i class="bi bi-gear"></i>系统设置
+        </a>
+    </nav>
+    
+    <div class="user-dropdown">
+        <div class="d-flex align-items-center p-2 rounded" style="background: rgba(255,255,255,0.1)">
+            <i class="bi bi-person-circle fs-4 me-2"></i>
+            <div class="flex-grow-1">
+                <div class="small fw-bold" id="current-user">管理员</div>
+                <div class="small opacity-75">在线</div>
+            </div>
+            <button class="btn btn-sm btn-outline-light" onclick="logout()" title="退出">
+                <i class="bi bi-box-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    <div id="view-dashboard">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="mb-1">控制面板</h4>
+                <p class="text-muted mb-0 small">管理您的 Factorio 服务器</p>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="showCreateServerModal()">
+                    <i class="bi bi-plus-lg me-1"></i>创建服务器
+                </button>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3 col-6 mb-3">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <div class="stat-icon bg-primary bg-opacity-10 text-primary me-3">
+                            <i class="bi bi-server"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">服务器总数</div>
+                            <div class="stat-value" id="stat-total">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6 mb-3">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <div class="stat-icon bg-success bg-opacity-10 text-success me-3">
+                            <i class="bi bi-play-circle"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">运行中</div>
+                            <div class="stat-value" id="stat-running">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6 mb-3">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <div class="stat-icon bg-warning bg-opacity-10 text-warning me-3">
+                            <i class="bi bi-people"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">在线玩家</div>
+                            <div class="stat-value" id="stat-players">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6 mb-3">
+                <div class="card stat-card system-resource-card">
+                    <div class="card-body flex-column align-items-stretch">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="stat-label">CPU</span>
+                            <span class="stat-value fs-6" id="sys-cpu">--</span>
+                        </div>
+                        <div class="resource-bar mb-3" style="background: rgba(255,255,255,0.2)">
+                            <div class="resource-bar-fill bg-white" id="sys-cpu-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="stat-label">内存</span>
+                            <span class="stat-value fs-6" id="sys-memory">--</span>
+                        </div>
+                        <div class="resource-bar" style="background: rgba(255,255,255,0.2)">
+                            <div class="resource-bar-fill bg-white" id="sys-memory-bar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">服务器列表</h5>
+            <div class="d-flex gap-2">
+                <div class="input-group input-group-sm" style="width: 200px">
+                    <input type="text" class="form-control" placeholder="搜索服务器..." id="search-input" oninput="filterServers()">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                </div>
+                <select class="form-select form-select-sm" style="width: 120px" id="filter-status" onchange="filterServers()">
+                    <option value="">全部状态</option>
+                    <option value="running">运行中</option>
+                    <option value="stopped">已停止</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row" id="server-list">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">加载中...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-servers" class="d-none">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="mb-1">服务器列表</h4>
+                <p class="text-muted mb-0 small">查看和管理所有服务器</p>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="showCreateServerModal()">
+                    <i class="bi bi-plus-lg me-1"></i>创建服务器
+                </button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>服务器名称</th>
+                                <th>ID</th>
+                                <th>Screen 会话</th>
+                                <th>RCON 端口</th>
+                                <th>状态</th>
+                                <th class="text-end">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="server-table-body">
+                            <tr><td colspan="6" class="text-center py-4 text-muted">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-monitor" class="d-none">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="mb-1">资源监控</h4>
+                <p class="text-muted mb-0 small">实时监控系统资源使用情况</p>
+            </div>
+            <div>
+                <button class="btn btn-outline-primary" onclick="loadSystemStats()">
+                    <i class="bi bi-arrow-repeat me-1"></i>刷新
+                </button>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header"><i class="bi bi-cpu me-2"></i>CPU 使用率</div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="display-4 me-3" id="monitor-cpu-value">--</div>
+                            <div class="text-muted">%</div>
+                        </div>
+                        <div class="progress" style="height: 10px">
+                            <div class="progress-bar bg-primary" id="monitor-cpu-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="mt-3 small text-muted">
+                            <div>负载均衡: <span id="monitor-load-avg">--</span></div>
+                            <div>运行时间: <span id="monitor-uptime">--</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header"><i class="bi bi-memory me-2"></i>内存使用</div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="display-4 me-3" id="monitor-memory-value">--</div>
+                            <div class="text-muted" id="monitor-memory-total">/ --</div>
+                        </div>
+                        <div class="progress" style="height: 10px">
+                            <div class="progress-bar bg-warning" id="monitor-memory-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="mt-3 small text-muted">
+                            <div>使用率: <span id="monitor-memory-percent">--</span>%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header"><i class="bi bi-hdd me-2"></i>磁盘使用</div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="display-6 me-3" id="monitor-disk-value">--</div>
+                            <div class="text-muted" id="monitor-disk-total">/ --</div>
+                        </div>
+                        <div class="progress" style="height: 10px">
+                            <div class="progress-bar bg-success" id="monitor-disk-bar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header"><i class="bi bi-people me-2"></i>在线玩家</div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="display-4 me-3" id="monitor-players-value">--</div>
+                            <div class="text-muted">人在线</div>
+                        </div>
+                        <div id="monitor-players-list" class="small">
+                            <div class="text-muted">暂无在线玩家</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-settings" class="d-none">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="mb-1">系统设置</h4>
+                <p class="text-muted mb-0 small">配置系统参数和用户管理</p>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header"><i class="bi bi-person-gear me-2"></i>用户管理</div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-muted small">用户账户</label>
+                                <div class="fw-bold fs-5" id="settings-username">--</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-muted small">账户类型</label>
+                                <div class="fw-bold fs-5">
+                                    <span class="badge bg-primary" id="settings-role">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="mb-3">
+                            <label class="form-label">修改密码</label>
+                            <input type="password" class="form-control mb-2" id="settings-new-password" placeholder="新密码（至少6位）">
+                            <input type="password" class="form-control" id="settings-confirm-password" placeholder="确认密码">
+                        </div>
+                        <button class="btn btn-primary" onclick="changePassword()">
+                            <i class="bi bi-check-lg me-1"></i>保存密码
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header"><i class="bi bi-shield-check me-2"></i>RCON 配置</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">RCON 默认端口</label>
+                            <input type="number" class="form-control" id="settings-rcon-port" value="27015">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">RCON 默认密码</label>
+                            <input type="text" class="form-control" id="settings-rcon-password" placeholder="留空自动生成">
+                            <div class="form-text">留空将自动生成安全的随机密码</div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="settings-rcon-enabled" checked>
+                            <label class="form-check-label" for="settings-rcon-enabled">
+                                启用 RCON
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveRconConfig()">
+                            <i class="bi bi-check-lg me-1"></i>保存 RCON 配置
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header"><i class="bi bi-palette me-2"></i>界面设置</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">主题风格</label>
+                            <select class="form-select" id="settings-theme">
+                                <option value="default">默认风格</option>
+                                <option value="industrial">现代风格</option>
+                                <option value="factorio">Factorio风格</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">刷新间隔 (秒)</label>
+                            <input type="number" class="form-control" id="settings-refresh-interval" value="10" min="5" max="60">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header"><i class="bi bi-info-circle me-2"></i>系统信息</div>
+                    <div class="card-body">
+                        <table class="table table-sm mb-0">
+                            <tr><td class="text-muted">版本</td><td>Factorio Server Pro v2.0</td></tr>
+                            <tr><td class="text-muted">PHP 版本</td><td id="settings-php-version">--</td></tr>
+                            <tr><td class="text-muted">服务器时间</td><td id="settings-server-time">--</td></tr>
+                            <tr><td class="text-muted">操作系统</td><td id="settings-os">--</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-people me-2"></i>用户列表</span>
+                <button class="btn btn-sm btn-primary" onclick="showAddUserModal()">
+                    <i class="bi bi-plus-lg me-1"></i>添加用户
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>用户名</th>
+                                <th>显示名称</th>
+                                <th>账户类型</th>
+                                <th>密码状态</th>
+                                <th class="text-end">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-list-body">
+                            <tr><td colspan="5" class="text-center py-3 text-muted">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="user-modal-title"><i class="bi bi-person-plus me-2"></i>添加用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-username">
+                <div class="mb-3">
+                    <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="user-username" placeholder="3-20位字母、数字或下划线">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">显示名称</label>
+                    <input type="text" class="form-control" id="user-display-name" placeholder="用户显示名称">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">账户类型</label>
+                    <select class="form-select" id="user-role">
+                        <option value="user">普通用户</option>
+                        <option value="admin">管理员</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">密码 <span class="text-danger" id="password-required">*</span></label>
+                    <input type="password" class="form-control" id="user-password" placeholder="至少6位">
+                    <div class="form-text" id="password-hint">新用户必须设置密码</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveUser()">
+                    <i class="bi bi-check-lg me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="createServerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createServerModalLabel"><i class="bi bi-plus-circle me-2"></i>创建新服务器</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <input type="hidden" id="edit-server-id" value="">
+            <div class="modal-body">
+                <ul class="nav nav-tabs mb-3" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#create-basic">基本配置</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#create-start">启动配置</button>
+                    </li>
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="create-basic">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">服务器名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="create-name" placeholder="例如：主服务器">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">服务器 ID <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="create-id" placeholder="例如：server1">
+                                <div class="form-text">只能包含字母、数字、下划线和连字符</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Screen 会话名 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="create-screen" placeholder="例如：factorio_server_1">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">RCON 端口 <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="create-rcon-port" value="27015" min="1" max="65535">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">RCON 密码</label>
+                                <input type="text" class="form-control" id="create-rcon-password" placeholder="留空自动生成">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">游戏端口</label>
+                                <input type="number" class="form-control" id="create-game-port" value="34197" min="1" max="65535">
+                                <div class="form-text">Factorio 默认端口 34197</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="create-start">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-bold">服务端版本 <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <select class="form-select" id="create-version">
+                                        <option value="">-- 请选择版本 --</option>
+                                    </select>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="checkUpdate()" title="检查更新">
+                                        <i class="bi bi-cloud-arrow-down"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold">地图存档 <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <select class="form-select" id="create-save">
+                                        <option value="">-- 请选择存档 --</option>
+                                    </select>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="loadCreateOptions()" title="刷新">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold">配置文件 <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <select class="form-select" id="create-config">
+                                        <option value="">-- 请选择配置 --</option>
+                                    </select>
+                                    <a href="/app/configEditor.php" target="_blank" class="btn btn-outline-secondary" title="编辑配置">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="loadCreateOptions()" title="刷新">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="alert alert-info mt-3 mb-0 small">
+                            <i class="bi bi-info-circle me-2"></i>
+                            创建服务器后，您可以在服务器详情页启动服务器，或勾选下方选项立即启动。
+                        </div>
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="checkbox" id="create-auto-start">
+                            <label class="form-check-label" for="create-auto-start">
+                                创建后立即启动服务器
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="createServer()">
+                    <i class="bi bi-check-lg me-1"></i>创建服务器
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast-container" class="position-fixed bottom-0 end-0 p-3"></div>
+
+<script src="/lib/vendor/bootstrap/js/bootstrap.bundle.js"></script>
+<script src="/app/public/assets/js/jquery-3.6.0.min.js"></script>
+<script>
+let servers = [];
+let systemStats = {};
+
+async function checkAuth() {
+    try {
+        const res = await fetch('../../api.php?action=check_auth');
+        const d = await res.json();
+        if (!d.authenticated) {
+            window.location.href = 'login.html';
+        } else {
+            document.getElementById('current-user').textContent = d.user?.name || '管理员';
+        }
+    } catch (e) {
+        window.location.href = 'login.html';
+    }
+}
+
+function logout() {
+    fetch('../../api.php?action=logout', { method: 'POST' })
+        .then(() => window.location.href = 'login.html');
+}
+
+function showToast(msg, type = 'info') {
+    const bg = type === 'error' ? 'bg-danger' : type === 'success' ? 'bg-success' : 'bg-primary';
+    const t = document.createElement('div');
+    t.className = `toast align-items-center text-white ${bg} border-0 show`;
+    t.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+}
+
+async function loadServerList() {
+    try {
+        const res = await fetch('/app/api.php?action=server_list');
+        const d = await res.json();
+        
+        if (d.success) {
+            servers = d.servers;
+            renderServerList();
+            updateStats();
+        }
+    } catch (e) {
+        showToast('加载服务器列表失败', 'error');
+    }
+}
+
+function renderServerList() {
+    const container = document.getElementById('server-list');
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const statusFilter = document.getElementById('filter-status').value;
+    
+    let filtered = servers.filter(s => {
+        const matchSearch = (s.description || s.id).toLowerCase().includes(search);
+        const matchStatus = !statusFilter || (statusFilter === 'running' ? s.running : !s.running);
+        return matchSearch && matchStatus;
+    });
+    
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="col-12 text-center py-5">
+                <div class="text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    ${servers.length === 0 ? '暂无服务器，点击右上角创建' : '没有匹配的服务器'}
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = filtered.map(server => `
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card server-card" onclick="openServer('${server.id}')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h6 class="mb-1">${server.description || server.id}</h6>
+                            <small class="text-muted">ID: ${server.id}</small>
+                        </div>
+                        <span class="server-status ${server.running ? 'running' : 'stopped'}"></span>
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <span class="me-3"><i class="bi bi-terminal me-1"></i>${server.screen_name}</span>
+                        <span><i class="bi bi-network-wired me-1"></i>${server.rcon_port}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge ${server.running ? 'bg-success' : 'bg-secondary'}">
+                            ${server.running ? '运行中' : '已停止'}
+                        </span>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="event.stopPropagation(); openServer('${server.id}')" title="管理">
+                                <i class="bi bi-gear"></i>
+                            </button>
+                            ${server.running ? `
+                                <button class="btn btn-outline-danger" onclick="event.stopPropagation(); quickStop('${server.id}')" title="停止">
+                                    <i class="bi bi-stop-fill"></i>
+                                </button>
+                            ` : `
+                                <button class="btn btn-outline-success" onclick="event.stopPropagation(); quickStart('${server.id}')" title="启动">
+                                    <i class="bi bi-play-fill"></i>
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('') + `
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="add-server-card" onclick="showCreateServerModal()">
+                <div class="text-center text-muted">
+                    <i class="bi bi-plus-circle fs-1 d-block mb-2"></i>
+                    <span>添加服务器</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function updateStats() {
+    const total = servers.length;
+    const running = servers.filter(s => s.running).length;
+    
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-running').textContent = running;
+}
+
+function switchView(viewName) {
+    const views = ['dashboard', 'servers', 'monitor', 'settings'];
+    views.forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        if (el) {
+            el.classList.toggle('d-none', v !== viewName);
+        }
+    });
+    
+    document.querySelectorAll('.sidebar-nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.nav === viewName);
+    });
+    
+    if (viewName === 'servers') {
+        loadServerTable();
+    } else if (viewName === 'monitor') {
+        loadMonitorData();
+    } else if (viewName === 'settings') {
+        loadSettingsInfo();
+    }
+}
+
+function loadServerTable() {
+    const tbody = document.getElementById('server-table-body');
+    
+    if (servers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">暂无服务器</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = servers.map(server => `
+        <tr>
+            <td>
+                <div class="d-flex align-items-center">
+                    <span class="server-status ${server.running ? 'running' : 'stopped'} me-2"></span>
+                    <span class="fw-semibold">${server.description || server.id}</span>
+                </div>
+            </td>
+            <td><code>${server.id}</code></td>
+            <td>${server.screen_name}</td>
+            <td>${server.rcon_port}</td>
+            <td>
+                <span class="badge ${server.running ? 'bg-success' : 'bg-secondary'}">
+                    ${server.running ? '运行中' : '已停止'}
+                </span>
+            </td>
+            <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="openServer('${server.id}')" title="管理">
+                        <i class="bi bi-gear"></i>
+                    </button>
+                    ${server.running ? `
+                        <button class="btn btn-outline-danger" onclick="quickStop('${server.id}')" title="停止">
+                            <i class="bi bi-stop-fill"></i>
+                        </button>
+                    ` : `
+                        <button class="btn btn-outline-success" onclick="quickStart('${server.id}')" title="启动">
+                            <i class="bi bi-play-fill"></i>
+                        </button>
+                    `}
+                    <button class="btn btn-outline-secondary" onclick="editServerConfig('${server.id}')" title="编辑">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="deleteServerConfig('${server.id}')" title="删除">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function loadMonitorData() {
+    try {
+        const res = await fetch('/app/api.php?action=system_stats');
+        const d = await res.json();
+        
+        if (d.success) {
+            document.getElementById('monitor-cpu-value').textContent = d.cpu_percent;
+            document.getElementById('monitor-cpu-bar').style.width = `${d.cpu_percent}%`;
+            
+            document.getElementById('monitor-memory-value').textContent = d.memory_used;
+            document.getElementById('monitor-memory-total').textContent = `/ ${d.memory_total}`;
+            document.getElementById('monitor-memory-bar').style.width = `${d.memory_percent}%`;
+            document.getElementById('monitor-memory-percent').textContent = d.memory_percent;
+            
+            document.getElementById('monitor-disk-value').textContent = d.disk_used;
+            document.getElementById('monitor-disk-total').textContent = `/ ${d.disk_total}`;
+            document.getElementById('monitor-disk-bar').style.width = `${d.disk_percent}%`;
+            
+            document.getElementById('monitor-players-value').textContent = d.total_players || 0;
+            
+            if (d.load_avg) {
+                document.getElementById('monitor-load-avg').textContent = d.load_avg.join(', ');
+            }
+            document.getElementById('monitor-uptime').textContent = d.uptime || '--';
+        }
+    } catch (e) {
+        console.error('加载监控数据失败', e);
+    }
+    
+    try {
+        const res = await fetch('/app/api.php?action=online_players');
+        const d = await res.json();
+        
+        if (d.success && d.players && d.players.length > 0) {
+            document.getElementById('monitor-players-list').innerHTML = d.players.map(p => `
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <span><i class="bi bi-person me-1"></i>${p.name}</span>
+                    <small class="text-muted">${p.last_action}</small>
+                </div>
+            `).join('');
+        } else {
+            document.getElementById('monitor-players-list').innerHTML = '<div class="text-muted">暂无在线玩家</div>';
+        }
+    } catch (e) {
+        console.error('加载玩家列表失败', e);
+    }
+}
+
+function loadSettingsInfo() {
+    document.getElementById('settings-php-version').textContent = '加载中...';
+    document.getElementById('settings-server-time').textContent = new Date().toLocaleString();
+    document.getElementById('settings-os').textContent = '加载中...';
+    document.getElementById('settings-username').textContent = '加载中...';
+    document.getElementById('settings-role').textContent = '加载中...';
+    
+    fetch('/app/api.php?action=phpinfo')
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                document.getElementById('settings-php-version').textContent = d.php_version || '--';
+                document.getElementById('settings-os').textContent = d.os || '--';
+                document.getElementById('settings-server-time').textContent = d.server_time || new Date().toLocaleString();
+            }
+        })
+        .catch(e => {
+            console.error('获取系统信息失败', e);
+            document.getElementById('settings-php-version').textContent = '--';
+            document.getElementById('settings-os').textContent = 'Linux';
+        });
+    
+    fetch('/app/api.php?action=get_user_info')
+        .then(res => res.json())
+        .then(d => {
+            if (d.success && d.user) {
+                document.getElementById('settings-username').textContent = d.user.username || '--';
+                const roleMap = {
+                    'admin': '管理员',
+                    'user': '普通用户'
+                };
+                const role = d.user.role || 'user';
+                document.getElementById('settings-role').textContent = roleMap[role] || role;
+                document.getElementById('settings-role').className = role === 'admin' ? 'badge bg-primary' : 'badge bg-secondary';
+            } else {
+                document.getElementById('settings-username').textContent = '未登录';
+                document.getElementById('settings-role').textContent = '--';
+            }
+        })
+        .catch(e => {
+            console.error('获取用户信息失败', e);
+            document.getElementById('settings-username').textContent = '获取失败';
+            document.getElementById('settings-role').textContent = '--';
+        });
+    
+    loadUserList();
+}
+
+function loadUserList() {
+    fetch('/app/api.php?action=user_list')
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                renderUserList(d.users);
+            } else {
+                document.getElementById('user-list-body').innerHTML = 
+                    '<tr><td colspan="5" class="text-center py-3 text-danger">加载失败</td></tr>';
+            }
+        })
+        .catch(e => {
+            document.getElementById('user-list-body').innerHTML = 
+                '<tr><td colspan="5" class="text-center py-3 text-danger">加载失败: ' + e.message + '</td></tr>';
+        });
+}
+
+function renderUserList(users) {
+    const tbody = document.getElementById('user-list-body');
+    
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">暂无用户</td></tr>';
+        return;
+    }
+    
+    const roleMap = { 'admin': '管理员', 'user': '普通用户' };
+    
+    tbody.innerHTML = users.map(user => `
+        <tr>
+            <td><code>${user.username}</code></td>
+            <td>${user.name || user.username}</td>
+            <td><span class="badge ${user.role === 'admin' ? 'bg-primary' : 'bg-secondary'}">${roleMap[user.role] || user.role}</span></td>
+            <td><span class="badge ${user.has_password ? 'bg-success' : 'bg-warning'}">${user.has_password ? '已设置' : '未设置'}</span></td>
+            <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="editUser('${user.username}', '${user.name || ''}', '${user.role}')" title="编辑">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-warning" onclick="resetUserPassword('${user.username}')" title="重置密码">
+                        <i class="bi bi-key"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="deleteUser('${user.username}')" title="删除">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function showAddUserModal() {
+    document.getElementById('user-modal-title').innerHTML = '<i class="bi bi-person-plus me-2"></i>添加用户';
+    document.getElementById('edit-username').value = '';
+    document.getElementById('user-username').value = '';
+    document.getElementById('user-username').disabled = false;
+    document.getElementById('user-display-name').value = '';
+    document.getElementById('user-role').value = 'user';
+    document.getElementById('user-password').value = '';
+    document.getElementById('password-required').style.display = 'inline';
+    document.getElementById('password-hint').textContent = '新用户必须设置密码';
+    
+    new bootstrap.Modal(document.getElementById('addUserModal')).show();
+}
+
+function editUser(username, name, role) {
+    document.getElementById('user-modal-title').innerHTML = '<i class="bi bi-pencil me-2"></i>编辑用户';
+    document.getElementById('edit-username').value = username;
+    document.getElementById('user-username').value = username;
+    document.getElementById('user-username').disabled = true;
+    document.getElementById('user-display-name').value = name;
+    document.getElementById('user-role').value = role;
+    document.getElementById('user-password').value = '';
+    document.getElementById('password-required').style.display = 'none';
+    document.getElementById('password-hint').textContent = '留空则不修改密码';
+    
+    new bootstrap.Modal(document.getElementById('addUserModal')).show();
+}
+
+function saveUser() {
+    const editUsername = document.getElementById('edit-username').value;
+    const username = document.getElementById('user-username').value.trim();
+    const displayName = document.getElementById('user-display-name').value.trim();
+    const role = document.getElementById('user-role').value;
+    const password = document.getElementById('user-password').value;
+    
+    if (!username) {
+        showToast('请输入用户名', 'error');
+        return;
+    }
+    
+    if (!editUsername && !password) {
+        showToast('新用户必须设置密码', 'error');
+        return;
+    }
+    
+    if (password && password.length < 6) {
+        showToast('密码长度至少6位', 'error');
+        return;
+    }
+    
+    const fd = new FormData();
+    if (editUsername) {
+        fd.append('action', 'update_user_info');
+        fd.append('username', editUsername);
+        if (displayName) fd.append('name', displayName);
+        fd.append('role', role);
+        if (password) fd.append('new_password', password);
+    } else {
+        fd.append('action', 'add_user');
+        fd.append('username', username);
+        fd.append('password', password);
+        fd.append('name', displayName || username);
+        fd.append('role', role);
+    }
+    
+    fetch('/app/api.php', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                showToast(d.message || '保存成功', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+                loadUserList();
+            } else {
+                showToast(d.error || '保存失败', 'error');
+            }
+        })
+        .catch(e => showToast('保存失败: ' + e.message, 'error'));
+}
+
+function deleteUser(username) {
+    if (!confirm(`确定要删除用户 "${username}" 吗？`)) return;
+    
+    const fd = new FormData();
+    fd.append('action', 'delete_user');
+    fd.append('username', username);
+    
+    fetch('/app/api.php', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                showToast(d.message || '删除成功', 'success');
+                loadUserList();
+            } else {
+                showToast(d.error || '删除失败', 'error');
+            }
+        })
+        .catch(e => showToast('删除失败: ' + e.message, 'error'));
+}
+
+function resetUserPassword(username) {
+    const newPassword = prompt(`请输入用户 "${username}" 的新密码（至少6位）：`);
+    
+    if (!newPassword) return;
+    
+    if (newPassword.length < 6) {
+        showToast('密码长度至少6位', 'error');
+        return;
+    }
+    
+    const fd = new FormData();
+    fd.append('action', 'reset_password');
+    fd.append('username', username);
+    fd.append('new_password', newPassword);
+    
+    fetch('/app/api.php', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                showToast(d.message || '密码已重置', 'success');
+            } else {
+                showToast(d.error || '重置失败', 'error');
+            }
+        })
+        .catch(e => showToast('重置失败: ' + e.message, 'error'));
+}
+
+function changePassword() {
+    const newPass = document.getElementById('settings-new-password').value;
+    const confirmPass = document.getElementById('settings-confirm-password').value;
+    
+    if (!newPass) {
+        showToast('请输入新密码', 'error');
+        return;
+    }
+    
+    if (newPass.length < 6) {
+        showToast('密码长度至少6位', 'error');
+        return;
+    }
+    
+    if (newPass !== confirmPass) {
+        showToast('两次密码输入不一致', 'error');
+        return;
+    }
+    
+    const fd = new FormData();
+    fd.append('action', 'change_password');
+    fd.append('new_password', newPass);
+    fd.append('confirm_password', confirmPass);
+    
+    fetch('/app/api.php', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                showToast(d.message || '密码修改成功', 'success');
+                document.getElementById('settings-new-password').value = '';
+                document.getElementById('settings-confirm-password').value = '';
+            } else {
+                showToast(d.error || '密码修改失败', 'error');
+            }
+        })
+        .catch(e => {
+            showToast('密码修改失败: ' + e.message, 'error');
+        });
+}
+
+async function loadSystemStats() {
+    try {
+        const res = await fetch('/app/api.php?action=system_stats');
+        const d = await res.json();
+        
+        if (d.success) {
+            systemStats = d;
+            
+            document.getElementById('sys-cpu').textContent = `${d.cpu_percent}%`;
+            document.getElementById('sys-cpu-bar').style.width = `${d.cpu_percent}%`;
+            
+            document.getElementById('sys-memory').textContent = d.memory_used;
+            document.getElementById('sys-memory-bar').style.width = `${d.memory_percent}%`;
+            
+            document.getElementById('stat-players').textContent = d.total_players || 0;
+        }
+    } catch (e) {
+        console.error('加载系统状态失败', e);
+    }
+}
+
+function openServer(serverId) {
+    window.location.href = `index.html?server=${serverId}`;
+}
+
+async function quickStart(serverId) {
+    const fd = new FormData();
+    fd.append('action', 'start');
+    fd.append('server', serverId);
+    
+    try {
+        const res = await fetch('/app/api.php', { method: 'POST', body: fd });
+        const d = await res.json();
+        showToast(d.message || '启动中...', 'success');
+        setTimeout(loadServerList, 2000);
+    } catch (e) {
+        showToast('启动失败', 'error');
+    }
+}
+
+async function quickStop(serverId) {
+    if (!confirm('确定要停止此服务器吗？')) return;
+    
+    const fd = new FormData();
+    fd.append('action', 'stop');
+    fd.append('server', serverId);
+    
+    try {
+        const res = await fetch('/app/api.php', { method: 'POST', body: fd });
+        const d = await res.json();
+        showToast(d.message || '停止中...', 'success');
+        setTimeout(loadServerList, 2000);
+    } catch (e) {
+        showToast('停止失败', 'error');
+    }
+}
+
+function filterServers() {
+    renderServerList();
+}
+
+function showCreateServerModal() {
+    document.getElementById('createServerModalLabel').innerHTML = '<i class="bi bi-plus-circle me-2"></i>创建新服务器';
+    document.getElementById('edit-server-id').value = '';
+    document.getElementById('create-name').value = '';
+    document.getElementById('create-id').value = '';
+    document.getElementById('create-id').disabled = false;
+    document.getElementById('create-screen').value = '';
+    document.getElementById('create-rcon-port').value = '27015';
+    document.getElementById('create-rcon-password').value = '';
+    document.getElementById('create-game-port').value = '34197';
+    document.getElementById('create-save').value = '';
+    document.getElementById('create-config').value = '';
+    document.getElementById('create-version').value = '';
+    document.getElementById('create-auto-start').checked = false;
+    
+    loadCreateOptions();
+    new bootstrap.Modal(document.getElementById('createServerModal')).show();
+}
+
+async function loadCreateOptions() {
+    try {
+        const [savesRes, configsRes, versionsRes] = await Promise.all([
+            fetch('/factorio/web/app/api.php?action=files&type=save'),
+            fetch('/factorio/web/app/api.php?action=files&type=config'),
+            fetch('/factorio/web/app/api.php?action=get_versions')
+        ]);
+        
+        const saves = await savesRes.json();
+        const configs = await configsRes.json();
+        const versions = await versionsRes.json();
+        
+        const saveSelect = document.getElementById('create-save');
+        saveSelect.innerHTML = '<option value="">-- 请选择存档 --</option>';
+        if (saves.files && Array.isArray(saves.files)) {
+            saves.files.forEach(f => {
+                const name = f.filename || f.name || f;
+                const display = f.display || name;
+                saveSelect.innerHTML += `<option value="${name}">${display}</option>`;
+            });
+        }
+        
+        const configSelect = document.getElementById('create-config');
+        configSelect.innerHTML = '<option value="">-- 请选择配置 --</option>';
+        if (configs.files && Array.isArray(configs.files)) {
+            configs.files.forEach(f => {
+                const name = f.filename || f.name || f;
+                const display = f.display || name;
+                configSelect.innerHTML += `<option value="${name}">${display}</option>`;
+            });
+        }
+        
+        const versionSelect = document.getElementById('create-version');
+        versionSelect.innerHTML = '<option value="">-- 请选择版本 --</option>';
+        if (versions.versions && Array.isArray(versions.versions)) {
+            versions.versions.forEach(v => {
+                const id = v.id || v;
+                const name = v.name || v.id || v;
+                versionSelect.innerHTML += `<option value="${id}">${name}</option>`;
+            });
+        }
+    } catch (e) {
+        console.error('加载选项失败:', e);
+        showToast('加载选项失败: ' + e.message, 'error');
+    }
+}
+
+async function createServer() {
+    const editId = document.getElementById('edit-server-id').value;
+    const name = document.getElementById('create-name').value.trim();
+    const id = document.getElementById('create-id').value.trim();
+    const screen = document.getElementById('create-screen').value.trim();
+    const rconPort = document.getElementById('create-rcon-port').value;
+    const rconPassword = document.getElementById('create-rcon-password').value;
+    const save = document.getElementById('create-save').value;
+    const config = document.getElementById('create-config').value;
+    const version = document.getElementById('create-version').value;
+    const autoStart = document.getElementById('create-auto-start').checked;
+    
+    if (!name || !id || !screen || !rconPort) {
+        showToast('请填写基本配置中的必填项', 'error');
+        return;
+    }
+    
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+        showToast('服务器 ID 格式不正确', 'error');
+        return;
+    }
+    
+    if (autoStart && (!save || !config || !version)) {
+        showToast('立即启动需要填写完整的启动配置', 'error');
+        return;
+    }
+    
+    const configData = {
+        rcon_enabled: true,
+        rcon_port: parseInt(rconPort),
+        rcon_password: rconPassword || 'factorio_' + id + '_' + Math.random().toString(36).substr(2, 8),
+        rcon_host: '127.0.0.1',
+        screen_name: screen,
+        description: name
+    };
+    
+    try {
+        const fd = new FormData();
+        fd.append('action', 'save_server_config');
+        fd.append('server_id', id);
+        fd.append('config', JSON.stringify(configData));
+        
+        const res = await fetch('/app/api.php', { method: 'POST', body: fd });
+        const d = await res.json();
+        
+        if (d.success) {
+            showToast(editId ? '服务器更新成功' : '服务器创建成功', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('createServerModal')).hide();
+            loadServerList();
+            
+            if (autoStart && save && config && version) {
+                showToast('正在启动服务器...', 'info');
+                
+                const startFd = new FormData();
+                startFd.append('action', 'start');
+                startFd.append('server', id);
+                startFd.append('map', save);
+                startFd.append('config', config);
+                startFd.append('version', version);
+                
+                const startRes = await fetch('/app/api.php', { method: 'POST', body: startFd });
+                const startData = await startRes.json();
+                
+                if (startData.message) {
+                    showToast(startData.message, 'success');
+                }
+                
+                setTimeout(() => {
+                    loadServerList();
+                }, 3000);
+            }
+        } else {
+            showToast(d.error || (editId ? '更新失败' : '创建失败'), 'error');
+        }
+    } catch (e) {
+        showToast((editId ? '更新' : '创建') + '失败: ' + e.message, 'error');
+    }
+}
+
+async function checkUpdate() {
+    showToast('正在检查更新...', 'info');
+    
+    try {
+        const res = await fetch('../../api.php?action=update_check');
+        const d = await res.json();
+        
+        if (d.has_update) {
+            showToast(`发现新版本: ${d.latest_version}`, 'success');
+        } else {
+            showToast('已是最新版本', 'success');
+        }
+        
+        loadCreateOptions();
+    } catch (e) {
+        showToast('检查更新失败', 'error');
+    }
+}
+
+function saveRconConfig() {
+    const rconPort = document.getElementById('settings-rcon-port').value;
+    const rconPassword = document.getElementById('settings-rcon-password').value;
+    const rconEnabled = document.getElementById('settings-rcon-enabled').checked;
+    
+    const configData = {
+        rcon_enabled: rconEnabled,
+        rcon_port: parseInt(rconPort),
+        rcon_password: rconPassword,
+        rcon_host: '127.0.0.1',
+        screen_name: 'factorio_server',
+        description: '默认服务端'
+    };
+    
+    const fd = new FormData();
+    fd.append('action', 'save_server_config');
+    fd.append('server_id', 'default');
+    fd.append('config', JSON.stringify(configData));
+    
+    fetch('/app/api.php', {
+        method: 'POST',
+        body: fd
+    })
+    .then(res => res.json())
+    .then(d => {
+        if (d.success) {
+            showToast('RCON 配置已保存', 'success');
+        } else {
+            showToast(d.error || '保存失败', 'error');
+        }
+    })
+    .catch(e => {
+        showToast('保存失败: ' + e.message, 'error');
+    });
+}
+
+function editServerConfig(serverId) {
+    const server = servers.find(s => s.id === serverId);
+    if (!server) {
+        showToast('找不到服务器配置', 'error');
+        return;
+    }
+    
+    document.getElementById('createServerModalLabel').innerHTML = '<i class="bi bi-pencil me-2"></i>编辑服务器: ' + server.id;
+    document.getElementById('edit-server-id').value = serverId;
+    document.getElementById('create-name').value = server.description || server.id;
+    document.getElementById('create-id').value = server.id;
+    document.getElementById('create-id').disabled = true;
+    document.getElementById('create-screen').value = server.screen_name;
+    document.getElementById('create-rcon-port').value = server.rcon_port;
+    document.getElementById('create-rcon-password').value = '';
+    document.getElementById('create-game-port').value = server.game_port || 34197;
+    
+    new bootstrap.Modal(document.getElementById('createServerModal')).show();
+}
+
+async function deleteServerConfig(serverId) {
+    if (!confirm('确定要删除服务器配置 "' + serverId + '" 吗？')) return;
+    
+    try {
+        const fd = new FormData();
+        fd.append('action', 'delete_server_config');
+        fd.append('server_id', serverId);
+        
+        const res = await fetch('/app/api.php', { method: 'POST', body: fd });
+        const d = await res.json();
+        
+        if (d.success) {
+            showToast('服务器配置已删除', 'success');
+            loadServerList();
+        } else {
+            showToast(d.error || '删除失败', 'error');
+        }
+    } catch (e) {
+        showToast('删除失败: ' + e.message, 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
+    loadServerList();
+    loadSystemStats();
+    
+    document.querySelectorAll('.sidebar-nav-item[data-nav]').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const view = item.dataset.nav;
+            if (view) {
+                switchView(view);
+            }
+        });
+    });
+    
+    setInterval(loadServerList, 10000);
+    setInterval(loadSystemStats, 5000);
+});
+</script>
+</body>
+</html>

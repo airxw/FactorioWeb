@@ -1,0 +1,69 @@
+# Factorio Server Pro - Security Configuration
+# Apache Web Server .htaccess file
+# 运行目录: web/
+
+# Enable rewrite engine
+RewriteEngine On
+
+# 设置基础目录
+RewriteBase /web
+
+# 根目录重定向到登录页 - 使用相对路径
+RewriteRule ^$ app/public/pages/login.html [R=302,L]
+
+# API 请求转发 - 使用相对路径
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^api$ app/api.php [L,QSA]
+
+# 如果请求的是根目录下的 HTML 文件，RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^([^/]+html)$ app/public/pages/$1 [L]
+
+# Security headers
+<IfModule mod_headers.c>
+    # Prevent clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # Prevent MIME type sniffing
+    Header always set X-Content-Type-Options "nosniff"
+    
+    # XSS protection
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Referrer policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Protect sensitive files
+<FilesMatch "^(config\.php|auth\.php|\.htaccess|\.user\.ini)">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect config directory
+<IfModule mod_rewrite.c>
+    RewriteRule ^config/ - [F,L]
+    RewriteRule ^logs/ - [F,L]
+    RewriteRule ^run/ - [F,L]
+</IfModule>
+
+# Protect log files
+<FilesMatch "\.log$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect JSON files in config
+<FilesMatch "config/.*\.json$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Directory listing
+Options -Indexes
+
+# PHP configuration
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_flag log_errors On
+    php_value error_log logs/php_errors.log
+</IfModule>

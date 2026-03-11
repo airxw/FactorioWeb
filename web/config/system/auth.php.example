@@ -1,0 +1,17 @@
+<?php
+
+return [
+    'users' => [
+        'your_username' => [
+            'password' => 'your_password_hash_here',
+            'role' => 'admin',
+            'name' => 'Your Name',
+        ],
+    ],
+    'session_expiry' => 86400,
+    'factorio_secrets' => [
+        'username' => 'your_factorio_username',
+        'password' => '',
+        'token' => 'your_factorio_token_here',
+    ],
+];

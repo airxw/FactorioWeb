@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCON 控制台</title>
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/lib/vendor/xterm/css/xterm.css">
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/bootstrap-icons.css">
+    <link id="skin-style" rel="stylesheet" href="/app/public/assets/skins/default.css">
+    <link rel="stylesheet" href="/app/public/assets/css/main.css">
+    <style>
+        body {
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .rcon-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .rcon-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+            border-bottom: 1px solid #30363d;
+        }
+        .rcon-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .rcon-title h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0;
+            color: #f0f6fc;
+        }
+        .rcon-title .badge {
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .rcon-status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .server-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .server-selector select {
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+        .server-selector select:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        .rcon-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            background: #0d1117;
+        }
+        .rcon-output {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .rcon-line {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: #161b22;
+            border-left: 3px solid #30363d;
+        }
+        .rcon-line.command {
+            border-left-color: #58a6ff;
+            background: #161b22;
+        }
+        .rcon-line.response {
+            border-left-color: #3fb950;
+            background: #0d1117;
+        }
+        .rcon-line.error {
+            border-left-color: #f85149;
+            background: rgba(248, 81, 73, 0.1);
+        }
+        .rcon-line.system {
+            border-left-color: #8b949e;
+            background: transparent;
+            color: #8b949e;
+            font-style: italic;
+        }
+        .line-prefix {
+            color: #8b949e;
+            margin-right: 8px;
+            user-select: none;
+        }
+        .line-time {
+            color: #484f58;
+            font-size: 11px;
+            margin-right: 8px;
+        }
+        .line-content {
+            color: #c9d1d9;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .rcon-input-area {
+            padding: 16px 20px;
+            background: #161b22;
+            border-top: 1px solid #30363d;
+        }
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .input-prompt {
+            color: #3fb950;
+            font-family: 'SF Mono', monospace;
+            font-weight: 600;
+        }
+        .rcon-input-area input {
+            flex: 1;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 14px;
+        }
+        .rcon-input-area input:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+        }
+        .rcon-input-area input::placeholder {
+            color: #484f58;
+        }
+        .btn-send {
+            background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .btn-send:hover {
+            background: linear-gradient(135deg, #2ea043 0%, #3fb950 100%);
+            transform: translateY(-1px);
+        }
+        .btn-send:disabled {
+            background: #21262d;
+            color: #484f58;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .quick-commands {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .quick-cmd {
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #8b949e;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .quick-cmd:hover {
+            background: #30363d;
+            color: #c9d1d9;
+            border-color: #8b949e;
+        }
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-icon {
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #8b949e;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .btn-icon:hover {
+            background: #30363d;
+            color: #c9d1d9;
+        }
+        .btn-icon.danger:hover {
+            background: rgba(248, 81, 73, 0.1);
+            border-color: #f85149;
+            color: #f85149;
+        }
+        .scroll-to-bottom {
+            position: fixed;
+            bottom: 100px;
+            right: 30px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #8b949e;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 100;
+        }
+        .scroll-to-bottom:hover {
+            background: #30363d;
+            color: #c9d1d9;
+        }
+        .scroll-to-bottom.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <div class="rcon-container">
+        <div class="rcon-header">
+            <div class="rcon-title">
+                <i class="bi bi-terminal-fill" style="font-size: 1.3rem; color: #58a6ff;"></i>
+                <h1>RCON 控制台</h1>
+                <span id="connection-badge" class="badge bg-secondary">未连接</span>
+            </div>
+            <div class="rcon-status">
+                <div class="server-selector">
+                    <i class="bi bi-server" style="color: #8b949e;"></i>
+                    <select id="server-select" onchange="switchServer()">
+                        <option value="default">默认服务器</option>
+                    </select>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-icon" onclick="clearOutput()" title="清空输出">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    <a href="index.html" class="btn-icon" title="返回控制面板">
+                        <i class="bi bi-arrow-left"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="rcon-body">
+            <div class="rcon-output" id="output"></div>
+        </div>
+        
+        <div class="rcon-input-area">
+            <div class="input-wrapper">
+                <span class="input-prompt">RCON&gt;</span>
+                <input type="text" id="command-input" placeholder="输入命令 (如 /help, /players, /admin ...)" onkeydown="handleKeyDown(event)">
+                <button class="btn-send" id="send-btn" onclick="sendCommand()">发送</button>
+            </div>
+            <div class="quick-commands">
+                <button class="quick-cmd" onclick="quickCommand('/help')">/help</button>
+                <button class="quick-cmd" onclick="quickCommand('/players')">/players</button>
+                <button class="quick-cmd" onclick="quickCommand('/admins')">/admins</button>
+                <button class="quick-cmd" onclick="quickCommand('/version')">/version</button>
+                <button class="quick-cmd" onclick="quickCommand('/time')">/time</button>
+                <button class="quick-cmd" onclick="quickCommand('/evolution')">/evolution</button>
+                <button class="quick-cmd" onclick="quickCommand('/permissions')">/permissions</button>
+                <button class="quick-cmd" onclick="quickCommand('/save')">/save</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="scroll-to-bottom" id="scroll-btn" onclick="scrollToBottom()">
+        <i class="bi bi-arrow-down"></i>
+    </div>
+
+    <script src="/lib/vendor/bootstrap/js/bootstrap.bundle.js"></script>
+    <script src="/app/public/assets/js/jquery-3.6.0.min.js"></script>
+    <script>
+        let currentServer = 'default';
+        let commandHistory = [];
+        let historyIndex = -1;
+        let isConnected = false;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadServerList();
+            checkConnection();
+            setInterval(checkConnection, 10000);
+            
+            const output = document.getElementById('output');
+            output.addEventListener('scroll', function() {
+                const scrollBtn = document.getElementById('scroll-btn');
+                if (output.scrollHeight - output.scrollTop > output.clientHeight + 100) {
+                    scrollBtn.classList.add('show');
+                } else {
+                    scrollBtn.classList.remove('show');
+                }
+            });
+        });
+
+        async function loadServerList() {
+            try {
+                const res = await fetch('/app/api.php?action=server_list');
+                const data = await res.json();
+                const select = document.getElementById('server-select');
+                select.innerHTML = '';
+                
+                if (data.servers && data.servers.length > 0) {
+                    data.servers.forEach(server => {
+                        const opt = document.createElement('option');
+                        opt.value = server.id;
+                        opt.textContent = server.description || server.id;
+                        if (server.id === currentServer) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="default">默认服务器</option>';
+                }
+            } catch (e) {
+                console.error('加载服务器列表失败', e);
+            }
+        }
+
+        function switchServer() {
+            currentServer = document.getElementById('server-select').value;
+            checkConnection();
+            addLine('system', `已切换到服务器: ${currentServer}`);
+        }
+
+        async function checkConnection() {
+            try {
+                const res = await fetch(`/app/api.php?action=rcon_status&server=${currentServer}`);
+                const data = await res.json();
+                const badge = document.getElementById('connection-badge');
+                const sendBtn = document.getElementById('send-btn');
+                
+                isConnected = data.connected;
+                
+                if (data.connected) {
+                    badge.className = 'badge bg-success';
+                    badge.textContent = `已连接 :${data.rcon_port}`;
+                    sendBtn.disabled = false;
+                } else if (data.running) {
+                    badge.className = 'badge bg-warning text-dark';
+                    badge.textContent = '服务器运行中 (RCON未连接)';
+                    sendBtn.disabled = true;
+                } else {
+                    badge.className = 'badge bg-secondary';
+                    badge.textContent = '服务器未运行';
+                    sendBtn.disabled = true;
+                }
+            } catch (e) {
+                const badge = document.getElementById('connection-badge');
+                badge.className = 'badge bg-danger';
+                badge.textContent = '连接错误';
+                document.getElementById('send-btn').disabled = true;
+                isConnected = false;
+            }
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter') {
+                sendCommand();
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                navigateHistory(-1);
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                navigateHistory(1);
+            }
+        }
+
+        function navigateHistory(direction) {
+            if (commandHistory.length === 0) return;
+            
+            historyIndex += direction;
+            
+            if (historyIndex < 0) {
+                historyIndex = 0;
+            } else if (historyIndex >= commandHistory.length) {
+                historyIndex = commandHistory.length;
+                document.getElementById('command-input').value = '';
+                return;
+            }
+            
+            document.getElementById('command-input').value = commandHistory[historyIndex];
+        }
+
+        async function sendCommand() {
+            const input = document.getElementById('command-input');
+            const command = input.value.trim();
+            
+            if (!command) return;
+            
+            if (!isConnected) {
+                addLine('error', '错误: RCON 未连接，无法发送命令');
+                return;
+            }
+            
+            commandHistory.push(command);
+            historyIndex = commandHistory.length;
+            
+            addLine('command', command);
+            input.value = '';
+            input.disabled = true;
+            document.getElementById('send-btn').disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('server', currentServer);
+                formData.append('command', command);
+                
+                const res = await fetch('/app/api.php?action=rcon_test', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                
+                if (data.success && data.response) {
+                    addLine('response', data.response);
+                } else if (data.error) {
+                    addLine('error', `错误: ${data.error}`);
+                } else {
+                    addLine('response', '(无返回内容)');
+                }
+            } catch (e) {
+                addLine('error', `请求失败: ${e.message}`);
+            } finally {
+                input.disabled = false;
+                document.getElementById('send-btn').disabled = false;
+                input.focus();
+            }
+        }
+
+        function quickCommand(cmd) {
+            document.getElementById('command-input').value = cmd;
+            sendCommand();
+        }
+
+        function addLine(type, content) {
+            const output = document.getElementById('output');
+            const line = document.createElement('div');
+            line.className = `rcon-line ${type}`;
+            
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            const prefix = {
+                'command': '>',
+                'response': '<',
+                'error': '!',
+                'system': '*'
+            }[type] || '-';
+            
+            line.innerHTML = `<span class="line-time">${time}</span><span class="line-prefix">${prefix}</span><span class="line-content">${escapeHtml(content)}</span>`;
+            
+            output.appendChild(line);
+            scrollToBottom();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function scrollToBottom() {
+            const output = document.getElementById('output');
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+            addLine('system', '输出已清空');
+        }
+    </script>
+</body>
+</html>

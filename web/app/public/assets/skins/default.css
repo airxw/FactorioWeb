@@ -1,0 +1,64 @@
+/* 默认皮肤样式 */
+
+:root {
+    --primary: #3b82f6;
+    --primary-dark: #2563eb;
+    --primary-light: #60a5fa;
+    --success: #10b981;
+    --success-light: #34d399;
+    --danger: #ef4444;
+    --danger-light: #f87171;
+    --warning: #f59e0b;
+    --warning-light: #fbbf24;
+    --info: #06b6d4;
+    --info-light: #22d3ee;
+    --bg-body: #f3f4f6;
+    --bg-sidebar: #ffffff;
+    --bg-card: #ffffff;
+    --bg-input: #ffffff;
+    --bg-input-border: #e5e7eb;
+    --border-color: #e5e7eb;
+    --text-primary: #374151;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+    --sidebar-width: 480px;
+    --border-radius: 12px;
+    --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --transition: all 0.3s ease;
+}
+
+/* 皮肤特定样式 */
+body {
+    font-family: 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.sidebar-header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+}
+
+.nav-pills .nav-link.active {
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+    color: #ffffff;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    border: none;
+}
+
+.log-entry.chat {
+    border-left: 4px solid var(--primary);
+}
+
+.log-entry.login {
+    border-left: 4px solid var(--success);
+}
+
+.log-entry.save {
+    border-left: 4px solid var(--warning);
+}
+
+.log-entry.system {
+    border-left: 4px solid var(--info);
+}

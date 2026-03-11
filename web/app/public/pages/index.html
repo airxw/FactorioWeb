@@ -1,0 +1,3657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factorio Server Pro</title>
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/lib/vendor/xterm/css/xterm.css">
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/bootstrap-icons.css">
+    <link id="skin-style" rel="stylesheet" href="/app/public/assets/skins/default.css">
+    <link rel="stylesheet" href="/app/public/assets/css/main.css">
+</head>
+<body>
+
+<div class="layout-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <a class="sidebar-brand" href="dashboard.html">
+                <i class="bi bi-hdd-rack-fill"></i>
+                <span>Factorio Pro</span>
+            </a>
+            <div class="sidebar-toolbar">
+                <div class="toolbar-group toolbar-status">
+                    <span id="server-status-badge" class="status-badge"><i class="bi bi-circle-fill"></i><span>连接中...</span></span>
+                </div>
+                <div class="toolbar-divider"></div>
+                <div class="toolbar-group toolbar-actions">
+                    <div class="dropdown">
+                        <button class="btn btn-icon" type="button" id="skinDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="切换皮肤">
+                            <i class="bi bi-palette"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="skinDropdown">
+                            <li><a class="dropdown-item" href="#" onclick="setSkin('default')"><i class="bi bi-sun me-2"></i>默认风格</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="setSkin('industrial')"><i class="bi bi-palette me-2"></i>现代风格</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="setSkin('factorio')"><i class="bi bi-gear me-2"></i>Factorio风格</a></li>
+                        </ul>
+                    </div>
+                    <button class="btn btn-icon" onclick="openServerManager()" title="服务器管理"><i class="bi bi-server"></i></button>
+                    <a href="console.html" target="_blank" class="btn btn-icon" title="控制台"><i class="bi bi-terminal"></i></a>
+                </div>
+                <div class="toolbar-divider"></div>
+                <div class="toolbar-group toolbar-exit">
+                    <button class="btn btn-icon btn-exit" onclick="logout()" title="退出登录"><i class="bi bi-box-arrow-right"></i></button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sidebar-body">
+            <div class="server-info-compact mb-3">
+                <div class="server-info-main">
+                    <span class="server-info-name" id="server-name">加载中...</span>
+                    <span id="current-server-status" class="badge bg-secondary">--</span>
+                </div>
+                <div class="server-info-meta">
+                    <span><i class="bi bi-tag"></i><span id="server-id">--</span></span>
+                    <span><i class="bi bi-terminal"></i><span id="server-screen">--</span></span>
+                    <span id="current-server-rcon" class="badge bg-secondary">RCON: --</span>
+                </div>
+            </div>
+            
+            <ul class="nav nav-pills nav-fill mb-4" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-control">控制</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-mods">模组</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-players">玩家</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-responder">交互</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-files">文件</button></li>
+            </ul>
+
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="tab-control">
+                    <div id="stop-area" class="d-none">
+                        <div class="card border-success bg-success bg-opacity-10 mb-4">
+                            <div class="card-body text-center py-4">
+                                <div class="mb-3 text-success"><i class="bi bi-check-circle-fill display-4"></i></div>
+                                <h5 class="fw-bold text-success mb-3">服务器正常运行中</h5>
+                                <div class="d-flex gap-2 justify-content-center">
+                                    <button onclick="saveGame()" class="btn btn-success"><i class="bi bi-save me-1"></i>存档</button>
+                                    <button onclick="controlServer('stop')" class="btn btn-danger"><i class="bi bi-power me-1"></i>停止</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="startForm" class="d-none">
+                        <div class="card mb-4">
+                            <div class="card-header"><i class="bi bi-sliders me-2"></i>启动配置</div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted">服务端版本</label>
+                                    <div class="input-group">
+                                        <select name="version" id="version-select" class="form-select"></select>
+                                        <button type="button" class="btn btn-light border" onclick="checkUpdate()" title="检查更新"><i class="bi bi-cloud-arrow-down"></i></button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted">地图存档 (.zip)</label>
+                                    <div class="input-group">
+                                        <select name="map" id="map-select" class="form-select"><option disabled>加载中...</option></select>
+                                        <button type="button" class="btn btn-light border" onclick="refreshMapList()"><i class="bi bi-arrow-repeat"></i></button>
+                                    </div>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label small fw-bold text-muted">配置文件 (.json)</label>
+                                    <div class="input-group">
+                                        <select name="config" id="config-select" class="form-select" onchange="updateConfigEditLink()"><option disabled>加载中...</option></select>
+                                        <a href="../../configEditor.php" target="_blank" id="config-edit-link" class="btn btn-light border" title="编辑配置"><i class="bi bi-pencil"></i></a>
+                                        <button type="button" class="btn btn-light border" onclick="refreshConfigList()"><i class="bi bi-arrow-repeat"></i></button>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="controlServer('start')" class="btn btn-primary w-100 py-2"><i class="bi bi-play-fill me-1"></i>启动服务器</button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-clock-history me-2"></i>历史存档（点击即可切换/回档）
+        <button class="btn btn-sm btn-outline-secondary float-end" onclick="refreshMapList()">
+            <i class="bi bi-arrow-repeat"></i>
+        </button>
+    </div>
+    <div class="list-group list-group-flush" id="save-history" style="max-height:300px;overflow-y:auto"></div>
+</div>
+                    <div class="text-center text-muted small mt-3 d-none">
+                        <span id="server-address" class="font-monospace">获取 IP 中...</span>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="tab-mods">
+                    <button class="btn btn-success w-100 mb-3" data-bs-toggle="modal" data-bs-target="#modPortalModal"><i class="bi bi-cloud-download me-2"></i>打开 Mod 门户</button>
+                    <div class="card">
+                        <div class="card-body p-2">
+                            <div class="input-group input-group-sm">
+                                <input type="file" id="mod-upload-input" class="form-control" multiple accept=".zip">
+                                <button class="btn btn-primary" onclick="uploadMod()">本地上传</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2 mt-4">
+                        <span class="fw-bold small text-muted">已安装列表</span>
+                        <div class="input-group input-group-sm w-50">
+                            <input type="text" id="local-mod-filter" class="form-control" placeholder="筛选..." onkeyup="filterLocalMods()">
+                            <button class="btn btn-light border" onclick="loadMods()"><i class="bi bi-arrow-repeat"></i></button>
+                        </div>
+                    </div>
+                    <div id="mod-list" class="bg-white border rounded" style="min-height: 200px; max-height: 500px; overflow-y: auto;"></div>
+                </div>
+
+                <div class="tab-pane fade" id="tab-players">
+                    <div class="position-relative mb-3">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white" style="cursor: default; user-select: none;"><i class="bi bi-search"></i></span>
+                            <input type="text" id="target-player" class="form-control" placeholder="输入玩家名或IP搜索..." autocomplete="off">
+                            <button class="btn btn-outline-secondary" onclick="loadPlayerLists()"><i class="bi bi-arrow-repeat"></i></button>
+                        </div>
+                        <!-- 玩家搜索下拉列表 -->
+                        <div id="player-dropdown" class="dropdown-menu w-100" style="max-height: 300px; overflow-y: auto; display: none;">
+                            <div class="dropdown-header d-flex justify-content-between align-items-center">
+                                <span>已知玩家列表</span>
+                                <small class="text-muted">点击选择</small>
+                            </div>
+                            <div id="player-dropdown-items"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-2 mb-4">
+                        <div class="col-6"><button class="btn btn-outline-danger w-100" onclick="doAction('ban')">封禁 (Ban)</button></div>
+                        <div class="col-6"><button class="btn btn-outline-warning w-100" onclick="doAction('kick')">踢出 (Kick)</button></div>
+                        <div class="col-6"><button class="btn btn-outline-success w-100" onclick="doAction('promote')">设为管理</button></div>
+                        <div class="col-6"><button class="btn btn-outline-secondary w-100" onclick="doAction('unban')">解封</button></div>
+                        <div class="col-6"><button class="btn btn-outline-primary w-100" onclick="doAction('wl-add')">+ 加白名单</button></div>
+                        <div class="col-6"><button class="btn btn-outline-dark w-100" onclick="doAction('wl-remove')">- 移出白名单</button></div>
+                    </div>
+                    
+                    <div class="card border-info mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #0dcaf0 0%, #0aa2c0 100%); color: white;">
+                            <span><i class="bi bi-gift me-2"></i>给予物品</span>
+                            <button class="btn btn-sm btn-light py-0 fw-bold" style="color: #0aa2c0;" data-bs-toggle="modal" data-bs-target="#itemModal">打开物品库</button>
+                        </div>
+                        <div class="card-body bg-light">
+                            <div class="input-group mb-2">
+                                <span class="input-group-text bg-white">物品代码</span>
+                                <input type="text" id="gift-item" class="form-control" placeholder="例如: iron-plate">
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white">数量</span>
+                                <input type="number" id="gift-count" class="form-control" value="100" min="1">
+                                <button class="btn btn-info text-white" onclick="doGift()">发送</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 已知玩家列表（从日志分析） -->
+                    <div class="card border-success mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #198754 0%, #157347 100%); color: white;">
+                            <span><i class="bi bi-people-fill me-2"></i>已知玩家（日志分析）</span>
+                            <small style="opacity: 0.8;">点击选择玩家</small>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="known-players-list" class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                                <div class="text-center text-muted small p-3">暂无玩家数据，等待玩家登录...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion accordion-flush border rounded mb-3" id="plAcc">
+                        <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#ls-admin">管理员</button></h2><div id="ls-admin" class="accordion-collapse collapse" data-bs-parent="#plAcc"><div class="list-group list-group-flush" id="list-admins"></div></div></div>
+                        <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#ls-white">白名单</button></h2><div id="ls-white" class="accordion-collapse collapse" data-bs-parent="#plAcc"><div class="list-group list-group-flush" id="list-whitelist"></div></div></div>
+                        <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#ls-ban">封禁名单</button></h2><div id="ls-ban" class="accordion-collapse collapse" data-bs-parent="#plAcc"><div class="list-group list-group-flush" id="list-bans"></div></div></div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="tab-files">
+                    <div class="card mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2"><label class="fw-bold small text-muted">快速上传</label><span class="badge bg-light text-secondary border">支持 .zip / .json</span></div>
+                            <div class="input-group"><input type="file" id="file-upload" class="form-control" multiple accept=".zip,.json"><button class="btn btn-primary" id="btn-upload"><i class="bi bi-upload"></i></button></div>
+                        </div>
+                    </div>
+                    <div class="mb-3"><div class="fw-bold small text-muted mb-2 px-1">地图存档 (Saves)</div><div id="file-list-map" class="list-group list-group-flush border rounded bg-white"></div></div>
+                    <div><div class="fw-bold small text-muted mb-2 px-1">配置文件 (Configs)</div><div id="file-list-config" class="list-group list-group-flush border rounded bg-white"></div></div>
+                </div>
+                
+                <!-- 自动响应模块 -->
+                <div class="tab-pane fade" id="tab-responder">
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-robot me-2"></i>自动响应系统
+                                <span id="auto-responder-status-badge" class="badge bg-secondary ms-2">检查中...</span>
+                            </div>
+                            <button id="btn-toggle-auto-responder" class="btn btn-sm btn-success" onclick="toggleAutoResponder()">
+                                <i class="bi bi-power me-1"></i>启动
+                            </button>
+                        </div>
+                        <div class="card-body" style="min-height: 600px;">
+                            <!-- 选项卡导航 -->
+                            <ul class="nav nav-tabs nav-fill mb-3" id="chatSettingsTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="periodic-tab" data-bs-toggle="tab" data-bs-target="#periodic-panel" type="button" role="tab">服务器响应</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="scheduled-tab" data-bs-toggle="tab" data-bs-target="#scheduled-panel" type="button" role="tab">定时任务</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="trigger-tab" data-bs-toggle="tab" data-bs-target="#trigger-panel" type="button" role="tab">关键词回复</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="event-tab" data-bs-toggle="tab" data-bs-target="#event-panel" type="button" role="tab">玩家事件</button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content" id="chatSettingsTabContent">
+                                <!-- 服务器响应设置 -->
+                                <div class="tab-pane fade show active" id="periodic-panel" role="tabpanel">
+                                    <div class="mb-3">
+                                        <h6 class="text-muted">服务器功能响应</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-bold text-muted">响应类型</label>
+                                            <div class="input-group mb-2">
+                                                <select id="server-response-type" class="form-select form-select-sm" style="max-width: 200px;">
+                                                    <option value="vote-kick">发起投票踢人</option>
+                                                    <option value="server-info">服务器信息</option>
+                                                    <option value="ping-test">延迟测试</option>
+                                                    <option value="restart-warning">重启警告</option>
+                                                    <option value="request-item">向腐竹讨要物品</option>
+                                                    <option value="custom">自定义命令</option>
+                                                </select>
+                                                <button class="btn btn-sm btn-outline-primary" onclick="addServerResponse()">添加</button>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3" id="response-config" style="display: none;">
+                                            <label class="form-label small fw-bold text-muted">配置参数</label>
+                                            <div id="vote-kick-config" class="response-config-content">
+                                                <div class="input-group mb-2">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="触发关键词（例如：!votekick）">
+                                                    <input type="number" class="form-control form-control-sm" placeholder="所需票数" min="1" max="10">
+                                                </div>
+                                                <div class="input-group mb-2">
+                                                    <input type="number" class="form-control form-control-sm" placeholder="投票超时时间（秒）" min="30" max="300">
+                                                    <input type="number" class="form-control form-control-sm" placeholder="冷却时间（秒）" min="60" max="1800">
+                                                </div>
+                                            </div>
+                                            <div id="ping-test-config" class="response-config-content" style="display: none;">
+                                                <div class="input-group mb-2">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="触发关键词（例如：!ping）">
+                                                </div>
+                                            </div>
+                                            <div id="server-info-config" class="response-config-content" style="display: none;">
+                                                <div class="input-group mb-2">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="触发关键词（例如：!server）">
+                                                </div>
+                                            </div>
+                                            <div id="restart-warning-config" class="response-config-content" style="display: none;">
+                                                <div class="input-group mb-2">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="触发关键词（例如：!restart）">
+                                                    <input type="number" class="form-control form-control-sm" placeholder="警告时间（分钟）" min="1" max="60">
+                                                </div>
+                                            </div>
+                                            <div id="custom-config" class="response-config-content" style="display: none;">
+                                                <div class="input-group mb-2">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="触发关键词">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="执行命令">
+                                                </div>
+                                            </div>
+                                            <div id="request-item-config" class="response-config-content" style="display: none;">
+                                                <div class="input-group mb-2">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="触发关键词（例如：!give）">
+                                                    <input type="number" class="form-control form-control-sm" placeholder="给予数量（默认100）" min="1" max="10000" value="100">
+                                                </div>
+                                                <div class="input-group mb-2">
+                                                    <input type="number" class="form-control form-control-sm" placeholder="冷却时间（秒）" min="0" max="86400" value="60">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="periodic-list" class="mt-2 border rounded p-2" style="max-height: 300px; overflow-y: auto;">
+                                            <div class="text-muted text-sm" id="periodic-list-empty">暂无服务器响应设置</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 定时发送设置 -->
+                                <div class="tab-pane fade" id="scheduled-panel" role="tabpanel">
+                                    <div class="mb-3">
+                                        <h6 class="text-muted">定时发送</h6>
+                                        <div class="input-group mb-2">
+                                            <input type="text" id="schedule-message" class="form-control form-control-sm" placeholder="定时消息内容">
+                                            <input type="time" id="schedule-time" class="form-control form-control-sm" style="max-width: 100px;">
+                                            <select id="schedule-repeat" class="form-select form-select-sm" style="max-width: 120px;">
+                                                <option value="once">仅一次</option>
+                                                <option value="seconds">每__秒</option>
+                                                <option value="minutes">每__分钟</option>
+                                                <option value="hours">每__小时</option>
+                                                <option value="daily">每天</option>
+                                                <option value="weekly">每周</option>
+                                            </select>
+                                            <input type="number" id="schedule-interval" class="form-control form-control-sm" style="max-width: 80px; display: none;" placeholder="间隔" min="1">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="scheduleChatMessage()">添加</button>
+                                        </div>
+                                        <div id="scheduled-list" class="mt-2 border rounded p-2" style="max-height: 300px; overflow-y: auto;">
+                                            <div class="text-muted text-sm" id="scheduled-list-empty">暂无定时任务</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 条件发送设置 -->
+                                <div class="tab-pane fade" id="trigger-panel" role="tabpanel">
+                                    <div class="mb-3">
+                                        <h6 class="text-muted">关键词自动回复</h6>
+                                        <div class="input-group mb-2">
+                                            <input type="text" id="trigger-keyword" class="form-control form-control-sm" placeholder="触发关键词">
+                                            <input type="text" id="trigger-response" class="form-control form-control-sm" placeholder="响应内容（可用 {player} 表示玩家名）">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="addTriggerResponse()">添加</button>
+                                        </div>
+                                        <!-- 已添加的条件发送列表 -->
+                                        <div id="trigger-list" class="mt-2 border rounded p-2" style="max-height: 300px; overflow-y: auto;">
+                                            <div class="text-muted text-sm" id="trigger-list-empty">暂无已添加的条件发送</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 玩家事件设置 -->
+                                <div class="tab-pane fade" id="event-panel" role="tabpanel">
+                                    <div class="mb-3">
+                                        <h6 class="text-muted">玩家事件自动响应</h6>
+                                        <div class="mb-3 p-2 border rounded">
+                                            <div class="form-check form-switch mb-2">
+                                                <input class="form-check-input" type="checkbox" id="welcome-enabled" onchange="updatePlayerEvents()">
+                                                <label class="form-check-label" for="welcome-enabled">玩家上线欢迎</label>
+                                            </div>
+                                            <input type="text" id="welcome-message" class="form-control form-control-sm" placeholder="欢迎消息（可用 {player} 表示玩家名）" onchange="updatePlayerEvents()">
+                                        </div>
+                                        <div class="mb-3 p-2 border rounded">
+                                            <div class="form-check form-switch mb-2">
+                                                <input class="form-check-input" type="checkbox" id="goodbye-enabled" onchange="updatePlayerEvents()">
+                                                <label class="form-check-label" for="goodbye-enabled">玩家下线告别</label>
+                                            </div>
+                                            <input type="text" id="goodbye-message" class="form-control form-control-sm" placeholder="告别消息（可用 {player} 表示玩家名）" onchange="updatePlayerEvents()">
+                                        </div>
+                                        <div class="mb-3 p-2 border rounded">
+                                            <div class="form-check form-switch mb-2">
+                                                <input class="form-check-input" type="checkbox" id="first-join-gift-enabled" onchange="updatePlayerEvents()">
+                                                <label class="form-check-label" for="first-join-gift-enabled">首次上线礼包</label>
+                                            </div>
+                                            <div id="first-join-gift-list" class="gift-items-list mb-2"></div>
+                                            <div class="d-flex gap-2">
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openGiftItemSelector('first-join')">
+                                                    <i class="bi bi-plus-lg me-1"></i>添加物品
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">首次上线的玩家将获得这些物品</small>
+                                        </div>
+                                        <div class="mb-3 p-2 border rounded">
+                                            <div class="form-check form-switch mb-2">
+                                                <input class="form-check-input" type="checkbox" id="rejoin-gift-enabled" onchange="updatePlayerEvents()">
+                                                <label class="form-check-label" for="rejoin-gift-enabled">再次上线礼包</label>
+                                            </div>
+                                            <div id="rejoin-gift-list" class="gift-items-list mb-2"></div>
+                                            <div class="d-flex gap-2">
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openGiftItemSelector('rejoin')">
+                                                    <i class="bi bi-plus-lg me-1"></i>添加物品
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">非首次上线的玩家将获得这些物品</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 系统状态监控 -->
+            <div class="monitor-container" id="monitor-container">
+                <div class="probe-header" onclick="toggleMonitor()">
+                    <span><i class="bi bi-activity me-2"></i>系统状态监控</span>
+                    <div class="d-flex align-items-center">
+                        <span id="sys-uptime" class="fw-normal font-monospace me-3">运行时间: --</span>
+                        <i id="monitor-toggle-icon" class="bi bi-chevron-up"></i>
+                    </div>
+                </div>
+                <div class="probe-body">
+                    <div class="sys-monitor-grid">
+                        <div class="sys-monitor-item">
+                            <div class="sys-monitor-header">
+                                <span class="sys-monitor-label"><i class="bi bi-cpu me-1"></i>处理器</span>
+                                <span class="sys-monitor-value" id="yh-cpu-txt">0%</span>
+                            </div>
+                            <div class="sys-monitor-bar">
+                                <div class="bar bar-cpu" id="yh-cpu-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="sys-monitor-detail" id="yh-cpu-model">--</div>
+                        </div>
+                        <div class="sys-monitor-item">
+                            <div class="sys-monitor-header">
+                                <span class="sys-monitor-label"><i class="bi bi-memory me-1"></i>内存</span>
+                                <span class="sys-monitor-value" id="yh-mem-txt">0/0 MB</span>
+                            </div>
+                            <div class="sys-monitor-bar sys-monitor-bar-multi">
+                                <div class="bar bar-mem" id="yh-mem-real" style="width: 0%" title="真实占用"></div>
+                                <div class="bar bar-buf" id="yh-mem-buf" style="width: 0%" title="Buffers"></div>
+                                <div class="bar bar-cache" id="yh-mem-cache" style="width: 0%" title="Cached"></div>
+                            </div>
+                            <div class="sys-monitor-legend">
+                                <span class="legend-item"><span class="legend-dot bar-mem"></span>占用</span>
+                                <span class="legend-item"><span class="legend-dot bar-buf"></span>缓冲</span>
+                                <span class="legend-item"><span class="legend-dot bar-cache"></span>缓存</span>
+                            </div>
+                        </div>
+                        <div class="sys-monitor-item">
+                            <div class="sys-monitor-header">
+                                <span class="sys-monitor-label"><i class="bi bi-hdd me-1"></i>硬盘</span>
+                                <span class="sys-monitor-value" id="yh-disk-txt">0/0 GB</span>
+                            </div>
+                            <div class="sys-monitor-bar">
+                                <div class="bar bar-disk" id="yh-disk-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="sys-monitor-item sys-monitor-item-net">
+                            <div class="sys-monitor-header">
+                                <span class="sys-monitor-label"><i class="bi bi-network me-1"></i>网络</span>
+                            </div>
+                            <div class="sys-monitor-net">
+                                <div class="net-stat">
+                                    <i class="bi bi-arrow-down text-success"></i>
+                                    <span id="yh-net-rx">0</span>
+                                </div>
+                                <div class="net-stat">
+                                    <i class="bi bi-arrow-up text-primary"></i>
+                                    <span id="yh-net-tx">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+        
+        <!-- 右侧主内容区域 -->
+        <div class="main-content">
+            <!-- 游戏日志分析 -->
+            <div class="monitor-container" id="log-container">
+                <div class="probe-header">
+                    <div class="d-flex align-items-center justify-content-between w-100">
+                        <div class="d-flex align-items-center">
+                            <span><i class="bi bi-file-earmark-text me-2"></i>游戏日志分析</span>
+                            <div class="log-controls ms-4">
+                                <button class="log-filter btn btn-sm btn-outline-secondary active" data-filter="chat">聊天</button>
+                                <button class="log-filter btn btn-sm btn-outline-secondary" data-filter="login">登录</button>
+                                <button class="log-filter btn btn-sm btn-outline-secondary" data-filter="save">存档</button>
+                                <button class="log-filter btn btn-sm btn-outline-secondary" data-filter="system">系统</button>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <span id="log-count" class="fw-normal font-monospace">日志: 0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="probe-body" style="position: relative;">
+                    <div class="log-content" id="log-content"></div>
+                    <button id="load-more-log" class="btn btn-outline-secondary btn-sm w-100 mb-2" style="display: none;" onclick="loadMoreLogHistory()">
+                        <i class="bi bi-arrow-up-circle me-1"></i>加载更早的日志
+                    </button>
+                    <button id="scroll-to-bottom" class="btn btn-primary btn-sm scroll-to-bottom-btn" style="display: none;" onclick="scrollLogToBottom()">
+                        <i class="bi bi-arrow-down-circle me-1"></i>最新消息
+                    </button>
+                </div>
+                    
+                    <!-- 聊天发送功能 -->
+                    <div class="mt-3 border-top pt-3">
+                        <!-- 消息类型选择 -->
+                        <div class="mb-2">
+
+                        </div>
+                        <!-- 消息输入和发送 -->
+                        <div class="input-group mb-2">
+                            <input type="text" id="chat-input" class="form-control" placeholder="输入聊天内容...">
+                            <button class="btn btn-primary" onclick="sendChatMessage()">发送</button>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- 进度条 Modal -->
+<div class="modal fade" id="progressModal" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="progressModalLabel">操作进度</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="progressModalClose" disabled></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2" id="progressMessage">准备中...</div>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="progressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div class="mt-2 text-end text-muted" id="progressDetails"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="progressModalCancel" disabled>取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mod 门户 Modal -->
+<div class="modal fade" id="modPortalModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header bg-dark text-white"><h5 class="modal-title">Mod 门户</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="input-group mb-3"><span class="input-group-text">授权</span><input type="text" id="factorio-user" class="form-control" placeholder="用户名"><input type="password" id="factorio-token" class="form-control" placeholder="Token"></div><div class="input-group mb-3"><input type="text" id="portal-search" class="form-control" placeholder="输入 Mod 名字..." onkeydown="if(event.keyCode==13) searchModPortal()"><button class="btn btn-dark" onclick="searchModPortal()">搜索</button></div><div id="portal-results" class="list-group"></div></div></div></div></div>
+
+<!-- 更新 Modal -->
+<div class="modal fade" id="updateModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">更新服务</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><div class="row mb-3"><div class="col-6 border-end"><h6>稳定版</h6><h4 id="ver-stable" class="text-success">...</h4><button class="btn btn-sm btn-outline-success" onclick="installVer($('#ver-stable').text())">安装</button></div><div class="col-6"><h6>实验版</h6><h4 id="ver-exp" class="text-warning">...</h4><button class="btn btn-sm btn-outline-warning" onclick="installVer($('#ver-exp').text())">安装</button></div></div><div id="update-log" class="alert alert-secondary d-none text-start small"></div></div></div></div></div>
+
+<!-- 物品库 Modal -->
+<div class="modal fade" id="itemModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i>Factorio 物品库 (2.0 + Space Age, 560+ 物品)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="text" id="item-search" class="form-control mb-3" placeholder="搜索物品（支持中文/英文模糊匹配）..." onkeyup="filterItems()" autocomplete="off">
+                <ul class="nav nav-tabs mb-0" id="itemTabs">
+                    <li class="nav-item"><button class="nav-link active" onclick="renderItems('logistics', this)">物流</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderItems('production', this)">生产</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderItems('combat', this)">战斗</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderItems('intermediate', this)">中间产品</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderItems('space-age', this)">太空时代</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderItems('equipment', this)">装备模块</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderItems('other', this)">其他</button></li>
+                </ul>
+                <div id="item-grid" class="item-grid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 礼包物品选择 Modal -->
+<div class="modal fade" id="giftItemModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-gift me-2"></i>选择礼包物品</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="text" id="gift-item-search" class="form-control mb-3" placeholder="搜索物品（支持中文/英文模糊匹配）..." onkeyup="filterGiftItems()" autocomplete="off">
+                <ul class="nav nav-tabs mb-0" id="giftItemTabs">
+                    <li class="nav-item"><button class="nav-link active" onclick="renderGiftItems('logistics', this)">物流</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderGiftItems('production', this)">生产</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderGiftItems('combat', this)">战斗</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderGiftItems('intermediate', this)">中间产品</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderGiftItems('space-age', this)">太空时代</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderGiftItems('equipment', this)">装备模块</button></li>
+                    <li class="nav-item"><button class="nav-link" onclick="renderGiftItems('other', this)">其他</button></li>
+                </ul>
+                <div id="gift-item-grid" class="item-grid"></div>
+            </div>
+            <div class="modal-footer">
+                <small class="text-muted me-auto">点击物品添加到礼包列表</small>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="serverManagerModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="bi bi-server me-2"></i>服务器管理</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0"><i class="bi bi-list-ul me-2"></i>服务器列表</h6>
+                        <button class="btn btn-sm btn-primary" onclick="showAddServerForm()">
+                            <i class="bi bi-plus-lg me-1"></i>添加服务器
+                        </button>
+                    </div>
+                    <div id="server-manager-list" class="list-group">
+                        <div class="text-center text-muted py-3">加载中...</div>
+                    </div>
+                </div>
+                
+                <div id="add-server-form" class="card d-none">
+                    <div class="card-header">
+                        <i class="bi bi-plus-circle me-2"></i>
+                        <span id="server-form-title">添加新服务器</span>
+                    </div>
+                    <div class="card-body">
+                        <input type="hidden" id="edit-server-id">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">服务器 ID</label>
+                                <input type="text" id="new-server-id" class="form-control form-control-sm" placeholder="例如: server1">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">描述名称</label>
+                                <input type="text" id="new-server-desc" class="form-control form-control-sm" placeholder="例如: 主服务器">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Screen 会话名</label>
+                                <input type="text" id="new-server-screen" class="form-control form-control-sm" placeholder="例如: factorio_server_1">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">RCON 端口</label>
+                                <input type="number" id="new-server-port" class="form-control form-control-sm" placeholder="例如: 27015" min="1" max="65535">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">RCON 密码</label>
+                                <input type="text" id="new-server-password" class="form-control form-control-sm" placeholder="RCON 密码">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">RCON 主机</label>
+                                <input type="text" id="new-server-host" class="form-control form-control-sm" placeholder="默认: 127.0.0.1" value="127.0.0.1">
+                            </div>
+                        </div>
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-sm btn-primary" onclick="saveServerConfig()">
+                                <i class="bi bi-check-lg me-1"></i>保存
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="hideAddServerForm()">
+                                <i class="bi bi-x-lg me-1"></i>取消
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <small class="text-muted me-auto">提示: RCON 端口和 Screen 会话名必须唯一</small>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/lib/vendor/bootstrap/js/bootstrap.bundle.js"></script>
+<script src="/lib/vendor/xterm/lib/xterm.js"></script>
+<script src="/lib/vendor/xterm/lib/xterm-addon-fit.js"></script>
+<script src="/app/public/assets/js/jquery-3.6.0.min.js"></script>
+
+<script>
+    async function checkAuth() {
+        try {
+            const res = await fetch('../../api.php?action=check_auth');
+            const d = await res.json();
+            if (!d.authenticated) {
+                window.location.href = 'login.html';
+            }
+        } catch (e) {
+            window.location.href = 'login.html';
+        }
+    }
+    
+    function logout() {
+        if (confirm('确定要退出登录吗？')) {
+            fetch('../../api.php?action=logout', { method: 'POST' })
+                .then(() => window.location.href = 'login.html');
+        }
+    }
+
+    // === 核心变量 ===
+    let ITEMS = {}; // 物品库数据
+    let currentServerId = 'default'; // 当前选中的服务器ID
+    let serverConfigs = {}; // 服务器配置缓存
+    
+    // === 安全工具函数 ===
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    }
+    
+    function escapeAttr(text) {
+        if (text === null || text === undefined) return '';
+        return String(text).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+    
+    function safePlayerName(name) {
+        if (!name) return '';
+        return String(name).replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]/g, '');
+    }
+    
+    function safeFilename(name) {
+        if (!name) return '';
+        return String(name).replace(/[<>"'&\/\\]/g, '');
+    }
+
+    // === 皮肤切换 ===
+    function setSkin(skin) {
+        const skinLink = document.getElementById('skin-style');
+        const skinNames = {
+            'default': '默认风格',
+            'industrial': '现代风格',
+            'factorio': 'Factorio风格'
+        };
+        if (skin === 'industrial') {
+            skinLink.href = 'static/skins/industrial.css';
+            localStorage.setItem('factorio-skin', 'industrial');
+        } else if (skin === 'factorio') {
+            skinLink.href = 'static/skins/factorio.css';
+            localStorage.setItem('factorio-skin', 'factorio');
+        } else {
+            skinLink.href = '/app/public/assets/skins/default.css';
+            localStorage.setItem('factorio-skin', 'default');
+        }
+        showToast('已切换到' + (skinNames[skin] || skin), 'success');
+    }
+
+    function loadSkin() {
+        const savedSkin = localStorage.getItem('factorio-skin');
+        if (savedSkin) {
+            setSkin(savedSkin);
+        }
+    }
+
+    // 加载服务器响应配置
+    async function loadServerResponses() {
+        try {
+            const response = await fetch('../../api.php?action=get_server_responses');
+            const data = await response.json();
+            
+            if (data.success && data.responses) {
+                const list = document.getElementById('periodic-list');
+                const listEmpty = document.getElementById('periodic-list-empty');
+                
+                if (listEmpty) {
+                    listEmpty.remove();
+                }
+                
+                list.innerHTML = '';
+                
+                data.responses.forEach(response => {
+                    const item = document.createElement('div');
+                    item.className = 'd-flex justify-content-between align-items-center p-2 border-bottom';
+                    item.dataset.keyword = response.keyword;
+                    item.dataset.type = response.type;
+                    
+                    let typeText = '';
+                    let valueText = '';
+                    switch (response.type) {
+                        case 'vote-kick':
+                            typeText = '发起投票踢人';
+                            try {
+                                const config = JSON.parse(response.value);
+                                valueText = `所需票数: ${config.required}, 超时: ${config.timeout}s, 冷却: ${config.cooldown}s`;
+                            } catch (e) {
+                                valueText = response.value;
+                            }
+                            break;
+                        case 'server-info':
+                            typeText = '服务器信息';
+                            valueText = response.value;
+                            break;
+                        case 'ping-test':
+                            typeText = '延迟测试';
+                            valueText = response.value;
+                            break;
+                        case 'restart-warning':
+                            typeText = '重启警告';
+                            valueText = response.value;
+                            break;
+                        case 'custom':
+                            typeText = '自定义命令';
+                            valueText = response.value;
+                            break;
+                        case 'request-item':
+                            typeText = '向腐竹讨要物品';
+                            try {
+                                const config = JSON.parse(response.value);
+                                valueText = `数量: ${config.count}, 冷却: ${config.cooldown}s`;
+                            } catch (e) {
+                                valueText = response.value;
+                            }
+                            break;
+                    }
+                    
+                    item.innerHTML = `
+                        <div>
+                            <span class="fw-bold">${typeText}</span>
+                            <span class="text-muted small ms-2">${response.keyword}</span>
+                            ${valueText ? `<span class="text-muted small ms-2">${valueText}</span>` : ''}
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="removeServerResponse(this)">删除</button>
+                    `;
+                    
+                    list.appendChild(item);
+                });
+                
+                if (data.responses.length === 0) {
+                    const emptyItem = document.createElement('div');
+                    emptyItem.className = 'text-muted text-sm';
+                    emptyItem.id = 'periodic-list-empty';
+                    emptyItem.textContent = '暂无服务器响应设置';
+                    list.appendChild(emptyItem);
+                }
+            }
+        } catch (error) {
+            console.error('加载服务器响应配置失败:', error);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const serverParam = urlParams.get('server');
+        if (serverParam) {
+            currentServerId = serverParam;
+            localStorage.setItem('factorio-current-server', currentServerId);
+        }
+        
+        loadSkin();
+        checkAuth();
+        document.getElementById('server-address').innerText = window.location.hostname + ":34197";
+        
+        Promise.all([
+            loadServerList(),
+            Promise.all([refreshMapList(), refreshConfigList(), loadAllFiles(), loadLocalVersions()])
+        ]).then(() => {
+            probe();
+            initItems();
+            loadPlayerLists();
+            loadServerResponses();
+            fetchOnlinePlayers();
+            checkAutoResponderStatus();
+        });
+        
+        // Tab 事件监听
+        document.querySelector('button[data-bs-target="#tab-mods"]').addEventListener('shown.bs.tab', loadMods);
+        document.querySelector('button[data-bs-target="#tab-players"]').addEventListener('shown.bs.tab', loadPlayerLists);
+        document.querySelector('button[data-bs-target="#tab-responder"]').addEventListener('shown.bs.tab', loadServerResponses);
+        // 物品库 Modal 事件 - 使用 Bootstrap 5 正确的事件名
+        const itemModalEl = document.getElementById('itemModal');
+        if (itemModalEl) {
+            itemModalEl.addEventListener('shown.bs.modal', function() {
+                console.log('物品库 Modal 已打开，itemsLoaded:', itemsLoaded);
+                if (itemsLoaded && ITEMS && Object.keys(ITEMS).length > 0) {
+                    renderItems('logistics');
+                }
+            });
+        }
+        
+        // 服务器响应类型选择
+        const responseTypeSelect = document.getElementById('server-response-type');
+        function updateResponseConfig() {
+            const type = responseTypeSelect.value;
+            const configDiv = document.getElementById('response-config');
+            const configContents = document.querySelectorAll('.response-config-content');
+            
+            if (!configDiv) return;
+            
+            configDiv.style.display = 'block';
+            
+            configContents.forEach(content => {
+                content.style.display = 'none';
+            });
+            
+            const targetConfig = document.getElementById(type + '-config');
+            if (targetConfig) {
+                targetConfig.style.display = 'block';
+            }
+        }
+        
+        responseTypeSelect.addEventListener('change', updateResponseConfig);
+        
+        updateResponseConfig();
+        
+        // 日志过滤按钮事件
+        document.querySelectorAll('.log-filter').forEach(btn => {
+            btn.addEventListener('click', function() {
+                filterLogEntries(this.dataset.filter);
+            });
+        });
+        
+        // 玩家搜索下拉事件
+        const playerInput = document.getElementById('target-player');
+        const dropdown = document.getElementById('player-dropdown');
+        
+        if (playerInput && dropdown) {
+            playerInput.addEventListener('input', function() {
+                if (this.value.trim()) {
+                    showPlayerDropdown();
+                } else {
+                    hidePlayerDropdown();
+                }
+            });
+            
+            playerInput.addEventListener('focus', function() {
+                showPlayerDropdown();
+            });
+            
+            document.addEventListener('click', function(e) {
+                if (!playerInput.contains(e.target) && !dropdown.contains(e.target)) {
+                    hidePlayerDropdown();
+                }
+            });
+        }
+        
+        // 初始化聊天功能
+        document.getElementById('chat-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+        loadFromServer();
+        
+        // 启动实时日志流
+        startLogStreaming();
+        
+        // 初始化滚动按钮监听器
+        initScrollButtonListener();
+        
+        // 文件上传按钮事件
+        document.getElementById('btn-upload').onclick = async () => {
+            const inp = document.getElementById('file-upload');
+            if (inp.files.length === 0) return showToast('请选择文件', 'error');
+            const fd = new FormData();
+            for (let f of inp.files) fd.append('file[]', f);
+            fd.append('action', 'upload');
+            const btn = document.getElementById('btn-upload');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            try {
+                await apiCall('upload', fd);
+                inp.value = '';
+                loadAllFiles();
+                refreshMapList();
+                refreshConfigList();
+                showToast('文件上传成功', 'success');
+            } catch (e) {
+                showToast('上传失败', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-upload"></i>';
+            }
+        };
+    });
+
+    // === 物品库逻辑 (完整版) ===
+    let itemsLoaded = false;
+    async function initItems() {
+        try {
+            const res = await fetch('../../../config/game/items.json?t=' + Date.now());
+            ITEMS = await res.json();
+            itemsLoaded = true;
+            const total = Object.values(ITEMS).reduce((sum, cat) => sum + Object.keys(cat).length, 0);
+            console.log(`%c物品库加载成功，共 ${total} 项 (Factorio 2.0 + Space Age)`, 'color:#10b981;font-weight:bold');
+            showToast(`物品库加载完成 (${total} 项)`, 'success');
+        } catch (e) {
+            console.warn('items.json 加载失败，使用 fallback', e);
+            ITEMS = {
+                logistics: {"iron-plate":"铁板","copper-plate":"铜板","transport-belt":"传送带","inserter":"机械臂"},
+                production: {"assembling-machine-2":"组装机2","electric-furnace":"电炉"},
+                combat: {"pistol":"手枪","firearm-magazine":"黄弹"}
+            };
+            itemsLoaded = true;
+            showToast('使用备用物品库 (3 项)', 'info');
+        }
+        if (playerEventsLoaded) {
+            updatePlayerEventUI();
+        }
+    }
+
+    function renderItems(cat, clickedBtn) {
+        const g = document.getElementById('item-grid');
+        g.innerHTML = '';
+        const items = ITEMS[cat] || {};
+        for (const [code, name] of Object.entries(items)) {
+            const b = document.createElement('button');
+            b.className = 'btn btn-outline-secondary item-btn h-100';
+            b.innerHTML = `<div class="fw-bold small">${name}</div><div class="text-muted small font-monospace">${code}</div>`;
+            b.onclick = () => {
+                document.getElementById('gift-item').value = code;
+                bootstrap.Modal.getInstance(document.getElementById('itemModal')).hide();
+                showToast(`已选择: ${name} (${code})`, 'info');
+            };
+            g.appendChild(b);
+        }
+        if (Object.keys(items).length === 0) g.innerHTML = '<div class="text-center text-muted p-4">暂无物品</div>';
+        // 更新 tab active
+        document.querySelectorAll('#itemTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+        if (clickedBtn) {
+            clickedBtn.classList.add('active');
+        } else {
+            const firstTab = document.querySelector('#itemTabs .nav-link');
+            if (firstTab) firstTab.classList.add('active');
+        }
+    }
+
+    function filterItems() {
+        const t = document.getElementById('item-search').value.toLowerCase().trim();
+        const g = document.getElementById('item-grid');
+        g.innerHTML = '';
+        let found = 0;
+        for (const cat in ITEMS) {
+            for (const [code, name] of Object.entries(ITEMS[cat])) {
+                if (code.includes(t) || name.toLowerCase().includes(t)) {
+                    const b = document.createElement('button');
+                    b.className = 'btn btn-primary item-btn h-100';
+                    b.innerHTML = `<div class="fw-bold small">${name}</div><div class="text-white small font-monospace">${code}</div>`;
+                    b.onclick = () => {
+                        document.getElementById('gift-item').value = code;
+                        bootstrap.Modal.getInstance(document.getElementById('itemModal')).hide();
+                        showToast(`已选择: ${name} (${code})`, 'info');
+                    };
+                    g.appendChild(b);
+                    found++;
+                }
+            }
+        }
+        if (found === 0) g.innerHTML = '<div class="col-12 text-center text-muted py-4"><i class="bi bi-search fs-1 mb-2"></i><p class="mb-0">未找到匹配物品</p></div>';
+    }
+    
+    // 服务器响应功能
+    async function addServerResponse() {
+        const type = document.getElementById('server-response-type').value;
+        const configDiv = document.getElementById(type + '-config');
+        const inputs = configDiv.querySelectorAll('input');
+        
+        let params = {};
+        if (type === 'vote-kick') {
+            // 投票踢人配置包含多个参数
+            params.keyword = inputs[0].value.trim();
+            params.required = inputs[1].value.trim();
+            params.timeout = inputs[2].value.trim();
+            params.cooldown = inputs[3].value.trim();
+            // 将参数组合成JSON字符串
+            params.value = JSON.stringify({
+                required: params.required,
+                timeout: params.timeout,
+                cooldown: params.cooldown
+            });
+        } else if (type === 'request-item') {
+            // 讨要物品配置
+            params.keyword = inputs[0].value.trim();
+            params.count = inputs[1].value.trim() || '100';
+            params.cooldown = inputs[2].value.trim() || '60';
+            // 将参数组合成JSON字符串
+            params.value = JSON.stringify({
+                count: params.count,
+                cooldown: params.cooldown
+            });
+        } else {
+            // 其他类型配置
+            inputs.forEach((input, index) => {
+                if (index === 0) {
+                    params.keyword = input.value.trim();
+                } else {
+                    params.value = input.value.trim();
+                }
+            });
+        }
+        
+        if (!params.keyword) {
+            showToast('请输入触发关键词', 'error');
+            return;
+        }
+        
+        // 保存到服务器配置文件
+        try {
+            const response = await fetch('../../api.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    action: 'save_server_response',
+                    type: type,
+                    keyword: params.keyword,
+                    value: params.value || ''
+                })
+            });
+            
+            const data = await response.json();
+            if (!data.success) {
+                showToast('保存失败: ' + data.message, 'error');
+                return;
+            }
+        } catch (error) {
+            showToast('保存失败: ' + error.message, 'error');
+            return;
+        }
+        
+        const list = document.getElementById('periodic-list');
+        const listEmpty = document.getElementById('periodic-list-empty');
+        
+        if (listEmpty) {
+            listEmpty.remove();
+        }
+        
+        const item = document.createElement('div');
+        item.className = 'd-flex justify-content-between align-items-center p-2 border-bottom';
+        item.dataset.keyword = params.keyword;
+        item.dataset.type = type;
+        
+        let typeText = '';
+        let valueText = '';
+        switch (type) {
+            case 'vote-kick':
+                typeText = '发起投票踢人';
+                try {
+                    const config = JSON.parse(params.value);
+                    valueText = `所需票数: ${config.required}, 超时: ${config.timeout}s, 冷却: ${config.cooldown}s`;
+                } catch (e) {
+                    valueText = params.value;
+                }
+                break;
+            case 'server-info':
+                typeText = '服务器信息';
+                valueText = params.value;
+                break;
+            case 'ping-test':
+                typeText = '延迟测试';
+                valueText = params.value;
+                break;
+            case 'restart-warning':
+                typeText = '重启警告';
+                valueText = params.value;
+                break;
+            case 'custom':
+                typeText = '自定义命令';
+                valueText = params.value;
+                break;
+            case 'request-item':
+                typeText = '向腐竹讨要物品';
+                try {
+                    const config = JSON.parse(params.value);
+                    valueText = `数量: ${config.count}, 冷却: ${config.cooldown}s`;
+                } catch (e) {
+                    valueText = params.value;
+                }
+                break;
+        }
+        
+        item.innerHTML = `
+            <div>
+                <span class="fw-bold">${typeText}</span>
+                <span class="text-muted small ms-2">${params.keyword}</span>
+                ${valueText ? `<span class="text-muted small ms-2">${valueText}</span>` : ''}
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="removeServerResponse(this)">删除</button>
+        `;
+        
+        list.appendChild(item);
+        showToast('服务器响应设置已添加', 'success');
+        
+        // 清空输入
+        inputs.forEach(input => {
+            input.value = '';
+        });
+    }
+    
+    async function removeServerResponse(btn) {
+        if (confirm('确定要删除这个服务器响应设置吗？')) {
+            const item = btn.closest('div');
+            const keyword = item.dataset.keyword;
+            const type = item.dataset.type;
+            
+            // 从服务器配置文件中删除
+            try {
+                const response = await fetch('../../api.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        action: 'remove_server_response',
+                        keyword: keyword,
+                        type: type
+                    })
+                });
+                
+                const data = await response.json();
+                if (!data.success) {
+                    showToast('删除失败: ' + data.message, 'error');
+                    return;
+                }
+            } catch (error) {
+                showToast('删除失败: ' + error.message, 'error');
+                return;
+            }
+            
+            item.remove();
+            const list = document.getElementById('periodic-list');
+            if (list.children.length === 0) {
+                const emptyItem = document.createElement('div');
+                emptyItem.className = 'text-muted text-sm';
+                emptyItem.id = 'periodic-list-empty';
+                emptyItem.textContent = '暂无服务器响应设置';
+                list.appendChild(emptyItem);
+            }
+            showToast('服务器响应设置已删除', 'success');
+        }
+    }
+
+    function doGift() {
+        const n = safePlayerName(document.getElementById('target-player').value.trim());
+        const i = safeFilename(document.getElementById('gift-item').value.trim());
+        const c = parseInt(document.getElementById('gift-count').value) || 1;
+        if (!n || !i) return showToast('请填写玩家名和物品代码', 'error');
+        if (n.length < 1 || n.length > 50) return showToast('玩家名格式无效', 'error');
+        if (i.length < 1 || i.length > 100) return showToast('物品代码格式无效', 'error');
+        if (c < 1 || c > 10000) return showToast('数量必须在 1-10000 之间', 'error');
+        if (confirm(`给玩家 "${n}" 投放 ${c} 个 "${i}"？（物品将掉落在玩家脚下）`)) {
+            const cmd = `/c local p = game.players["${n}"] if p and p.valid then p.surface.create_entity{name="item-on-ground", position=p.position, stack={name="${i}", count=${c}}} end`;
+            const fd = new FormData();
+            fd.append('cmd', cmd);
+            apiCall('console', fd).then(() => showToast(`已向 "${n}" 投放 ${c} 个 "${i}"`, 'success'));
+        }
+    }
+
+    // === 通用函数 ===
+    function showToast(msg, type='info') {
+        const bg = type==='error'?'bg-danger':type==='success'?'bg-success':'bg-primary';
+        const t = document.createElement('div');
+        t.className = `toast align-items-center text-white ${bg} border-0 show mb-2`;
+        t.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+        document.getElementById('toast-container').appendChild(t);
+        new bootstrap.Toast(t).show();
+        setTimeout(() => t.remove(), 3000);
+    }
+
+    async function apiCall(action, body = null, qs = '') {
+        const fd = body instanceof FormData ? body : new FormData();
+        if (!fd.has('action')) fd.append('action', action);
+        if (!fd.has('server') && currentServerId) fd.append('server', currentServerId);
+        try {
+            const res = await fetch('../../api.php' + (qs || ''), { method: 'POST', body: fd });
+            const d = await res.json();
+            if (d.error) { showToast(d.error, 'error'); throw d.error; }
+            if (d.message) showToast(d.message, 'success');
+            return d;
+        } catch (e) { showToast('请求失败: ' + e.message, 'error'); throw e; }
+    }
+
+    // === 多服务器管理 ===
+    async function loadServerList() {
+        try {
+            const res = await fetch('../../api.php?action=server_list');
+            const d = await res.json();
+            
+            if (d.success && d.servers) {
+                serverConfigs = {};
+                d.servers.forEach(server => {
+                    serverConfigs[server.id] = server;
+                });
+                updateCurrentServerInfo();
+            }
+        } catch (e) {
+            console.error('加载服务器列表失败:', e);
+        }
+    }
+
+    async function updateCurrentServerInfo() {
+        try {
+            const res = await fetch(`../../api.php?action=rcon_status&server=${currentServerId}`);
+            const d = await res.json();
+            
+            const serverName = document.getElementById('server-name');
+            const serverId = document.getElementById('server-id');
+            const serverScreen = document.getElementById('server-screen');
+            const serverRcon = document.getElementById('server-rcon');
+            const rconBadge = document.getElementById('current-server-rcon');
+            const statusBadge = document.getElementById('current-server-status');
+            
+            if (serverName) serverName.textContent = d.description || currentServerId;
+            if (serverId) serverId.textContent = currentServerId;
+            if (serverScreen) serverScreen.textContent = d.screen_name || '--';
+            if (serverRcon) serverRcon.textContent = d.rcon_port || '--';
+            
+            if (rconBadge) {
+                rconBadge.textContent = `RCON: ${d.rcon_port || '--'}`;
+                rconBadge.className = d.connected ? 'badge bg-success' : 'badge bg-secondary';
+            }
+            
+            if (statusBadge) {
+                statusBadge.textContent = d.running ? '运行中' : '已停止';
+                statusBadge.className = d.running ? 'badge bg-success' : 'badge bg-secondary';
+            }
+            
+            updateAppStatus(d.running);
+        } catch (e) {
+            console.error('更新服务器信息失败:', e);
+        }
+    }
+
+    async function refreshCurrentServerStatus() {
+        try {
+            const res = await fetch(`../../api.php?action=rcon_status&server=${currentServerId}`);
+            const d = await res.json();
+            
+            const statusBadge = document.getElementById('current-server-status');
+            if (statusBadge) {
+                statusBadge.textContent = d.running ? '运行中' : '已停止';
+                statusBadge.className = d.running ? 'badge bg-success' : 'badge bg-secondary';
+            }
+            
+            updateAppStatus(d.running);
+        } catch (e) {
+            console.error('刷新服务器状态失败:', e);
+        }
+    }
+
+    function openServerManager() {
+        const modal = new bootstrap.Modal(document.getElementById('serverManagerModal'));
+        modal.show();
+        loadServerManagerList();
+    }
+
+    async function loadServerManagerList() {
+        const list = document.getElementById('server-manager-list');
+        list.innerHTML = '<div class="text-center text-muted py-3">加载中...</div>';
+        
+        try {
+            const res = await fetch('../../api.php?action=server_list');
+            const d = await res.json();
+            
+            if (d.success && d.servers) {
+                if (d.servers.length === 0) {
+                    list.innerHTML = '<div class="text-center text-muted py-3">暂无服务器配置</div>';
+                    return;
+                }
+                
+                const fragment = document.createDocumentFragment();
+                d.servers.forEach(server => {
+                    const safeId = escapeAttr(server.id);
+                    const displayDesc = escapeHtml(server.description || server.id);
+                    const displayId = escapeHtml(server.id);
+                    const displayScreen = escapeHtml(server.screen_name || '--');
+                    const displayPort = escapeHtml(server.rcon_port || '--');
+                    
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    item.innerHTML = `
+                        <div>
+                            <div class="fw-bold">${displayDesc}</div>
+                            <small class="text-muted">
+                                ID: ${displayId} | 
+                                Screen: ${displayScreen} | 
+                                RCON: ${displayPort}
+                            </small>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <span class="badge ${server.running ? 'bg-success' : 'bg-secondary'}">
+                                ${server.running ? '运行中' : '已停止'}
+                            </span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editServerConfig('${safeId}')" title="编辑">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteServerConfig('${safeId}')" title="删除">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>`;
+                    fragment.appendChild(item);
+                });
+                list.innerHTML = '';
+                list.appendChild(fragment);
+            }
+        } catch (e) {
+            list.innerHTML = '<div class="text-center text-danger py-3">加载失败: ' + escapeHtml(e.message) + '</div>';
+        }
+    }
+
+    function showAddServerForm() {
+        document.getElementById('add-server-form').classList.remove('d-none');
+        document.getElementById('server-form-title').textContent = '添加新服务器';
+        document.getElementById('edit-server-id').value = '';
+        document.getElementById('new-server-id').value = '';
+        document.getElementById('new-server-id').disabled = false;
+        document.getElementById('new-server-desc').value = '';
+        document.getElementById('new-server-screen').value = '';
+        document.getElementById('new-server-port').value = '';
+        document.getElementById('new-server-password').value = '';
+        document.getElementById('new-server-host').value = '127.0.0.1';
+    }
+
+    function hideAddServerForm() {
+        document.getElementById('add-server-form').classList.add('d-none');
+    }
+
+    function editServerConfig(serverId) {
+        const config = serverConfigs[serverId];
+        if (!config) {
+            showToast('找不到服务器配置', 'error');
+            return;
+        }
+        
+        document.getElementById('add-server-form').classList.remove('d-none');
+        document.getElementById('server-form-title').textContent = '编辑服务器: ' + serverId;
+        document.getElementById('edit-server-id').value = serverId;
+        document.getElementById('new-server-id').value = serverId;
+        document.getElementById('new-server-id').disabled = true;
+        document.getElementById('new-server-desc').value = config.description || '';
+        document.getElementById('new-server-screen').value = config.screen_name || '';
+        document.getElementById('new-server-port').value = config.rcon_port || 27015;
+        document.getElementById('new-server-password').value = '';
+        document.getElementById('new-server-host').value = '127.0.0.1';
+    }
+
+    async function saveServerConfig() {
+        const editId = document.getElementById('edit-server-id').value;
+        const serverId = document.getElementById('new-server-id').value.trim();
+        const desc = document.getElementById('new-server-desc').value.trim();
+        const screenName = document.getElementById('new-server-screen').value.trim();
+        const port = parseInt(document.getElementById('new-server-port').value) || 27015;
+        const password = document.getElementById('new-server-password').value;
+        const host = document.getElementById('new-server-host').value.trim() || '127.0.0.1';
+        
+        if (!serverId) {
+            showToast('请输入服务器 ID', 'error');
+            return;
+        }
+        
+        if (!screenName) {
+            showToast('请输入 Screen 会话名', 'error');
+            return;
+        }
+        
+        const config = {
+            rcon_enabled: true,
+            rcon_port: port,
+            rcon_password: password || 'factorio_rcon_' + serverId,
+            rcon_host: host,
+            screen_name: screenName,
+            description: desc || serverId
+        };
+        
+        try {
+            const fd = new FormData();
+            fd.append('action', 'save_server_config');
+            fd.append('server_id', serverId);
+            fd.append('config', JSON.stringify(config));
+            
+            const res = await fetch('../../api.php', { method: 'POST', body: fd });
+            const d = await res.json();
+            
+            if (d.success) {
+                showToast('服务器配置已保存', 'success');
+                hideAddServerForm();
+                loadServerManagerList();
+                loadServerList();
+            } else {
+                showToast(d.error || '保存失败', 'error');
+            }
+        } catch (e) {
+            showToast('保存失败: ' + e.message, 'error');
+        }
+    }
+
+    async function deleteServerConfig(serverId) {
+        if (serverId === 'default') {
+            showToast('不能删除默认服务器', 'error');
+            return;
+        }
+        
+        if (!confirm(`确定要删除服务器 "${serverId}" 吗？\n\n注意：这只会删除配置，不会停止正在运行的服务器。`)) {
+            return;
+        }
+        
+        try {
+            const fd = new FormData();
+            fd.append('action', 'delete_server_config');
+            fd.append('server_id', serverId);
+            
+            const res = await fetch('../../api.php', { method: 'POST', body: fd });
+            const d = await res.json();
+            
+            if (d.success) {
+                showToast('服务器配置已删除', 'success');
+                loadServerManagerList();
+                loadServerList();
+                
+                if (currentServerId === serverId) {
+                    currentServerId = 'default';
+                    updateCurrentServerInfo();
+                }
+            } else {
+                showToast(d.error || '删除失败', 'error');
+            }
+        } catch (e) {
+            showToast('删除失败: ' + e.message, 'error');
+        }
+    }
+
+    // === 系统探针 ===
+    async function probe() {
+        try {
+            const res = await fetch('../../tz.php');
+            const d = await res.json();
+            
+            // 处理器信息
+            const cpuBar = document.getElementById('yh-cpu-bar');
+            const cpuTxt = document.getElementById('yh-cpu-txt');
+            const cpuModel = document.getElementById('yh-cpu-model');
+            if (cpuBar && cpuTxt && cpuModel) {
+                cpuBar.style.width = d.cpu_usage + '%';
+                cpuTxt.innerText = d.cpu_usage + '%';
+                cpuModel.innerText = d.cpu_name;
+            }
+            
+            // 内存信息
+            const m = d.mem;
+            const memReal = document.getElementById('yh-mem-real');
+            const memBuf = document.getElementById('yh-mem-buf');
+            const memCache = document.getElementById('yh-mem-cache');
+            const memTxt = document.getElementById('yh-mem-txt');
+            if (memReal && memBuf && memCache && memTxt) {
+                memReal.style.width = (m.real_used / m.total * 100) + '%';
+                memBuf.style.width = (m.buffers / m.total * 100) + '%';
+                memCache.style.width = (m.cached / m.total * 100) + '%';
+                memTxt.innerText = Math.round(m.real_used / 1024 / 1024) + '/' + Math.round(m.total / 1024 / 1024) + ' MB';
+            }
+            
+            // 系统信息
+            const sysUptime = document.getElementById('sys-uptime');
+            const yhOs = document.getElementById('yh-os');
+            const yhLoad = document.getElementById('yh-load');
+            if (sysUptime) sysUptime.innerText = `运行时间: ${fmt(d.uptime)}`;
+            if (yhOs) yhOs.innerText = d.os;
+            if (yhLoad) yhLoad.innerText = d.load.join(' ');
+            
+            // 硬盘信息
+            const diskBar = document.getElementById('yh-disk-bar');
+            const diskTxt = document.getElementById('yh-disk-txt');
+            if (diskBar && diskTxt) {
+                diskBar.style.width = d.disk.percent + '%';
+                diskTxt.innerText = d.disk.used + '/' + d.disk.total + ' GB';
+            }
+            
+            // 网络信息
+            const netRx = document.getElementById('yh-net-rx');
+            const netTx = document.getElementById('yh-net-tx');
+            if (netRx && netTx) {
+                netRx.innerText = fmtBytes(d.net.rx);
+                netTx.innerText = fmtBytes(d.net.tx);
+            }
+            
+            // 更新应用状态
+            updateAppStatus(d.app_running);
+        } catch (e) { console.error('探针失败', e); }
+    }
+
+    function updateAppStatus(run) {
+        const b = document.getElementById('server-status-badge');
+        const stopArea = document.getElementById('stop-area');
+        const startForm = document.getElementById('startForm');
+        
+        if (b) {
+            if (run) {
+                b.className = 'badge bg-success';
+                b.innerText = '运行中';
+                if (stopArea) stopArea.classList.remove('d-none');
+                if (startForm) startForm.classList.add('d-none');
+            } else {
+                b.className = 'badge bg-secondary';
+                b.innerText = '已停止';
+                if (stopArea) stopArea.classList.add('d-none');
+                if (startForm) startForm.classList.remove('d-none');
+            }
+        }
+    }
+
+    function fmt(s) {
+        const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+        return `${d}d ${h}h ${m}m`;
+    }
+
+    function fmtBytes(b) {
+        if (b === 0) return '0 B';
+        const k = 1024, i = Math.floor(Math.log(b) / Math.log(k));
+        return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
+    }
+
+    // === Mod 管理 ===
+    async function loadMods() {
+        try {
+            const res = await fetch('../../api.php?action=mod_list');
+            const d = await res.json();
+            const el = document.getElementById('mod-list');
+            el.innerHTML = '';
+            if (!d.mods || !d.mods.length) {
+                el.innerHTML = '<div class="text-center p-3 text-muted">暂无模组</div>';
+                return;
+            }
+            
+            const fragment = document.createDocumentFragment();
+            d.mods.forEach(m => {
+                const isDlc = m.filename === '[官方 DLC]';
+                const safeName = escapeAttr(m.name);
+                const safeFilename = escapeAttr(m.filename);
+                const checked = m.enabled ? 'checked' : '';
+                
+                const div = document.createElement('div');
+                div.className = 'mod-item';
+                div.innerHTML = `
+                    <div class="text-truncate" style="flex:1">
+                        <div class="mod-name ${m.enabled ? '' : 'text-muted'}">${escapeHtml(m.name)}</div>
+                        <div class="mod-file small">${escapeHtml(m.filename)}</div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" ${checked} onchange="toggleMod('${safeName}', this.checked)"></div>
+                        ${isDlc ? '' : `<button class="btn btn-sm btn-link text-danger p-0 ms-3" onclick="delMod('${safeFilename}')"><i class="bi bi-trash"></i></button>`}
+                    </div>`;
+                fragment.appendChild(div);
+            });
+            el.appendChild(fragment);
+        } catch (e) { showToast('加载模组失败', 'error'); }
+    }
+
+    function filterLocalMods() {
+        const t = document.getElementById('local-mod-filter').value.toLowerCase();
+        document.querySelectorAll('.mod-item').forEach(el => {
+            const n = el.querySelector('.mod-name').innerText.toLowerCase();
+            el.style.display = n.includes(t) ? 'flex' : 'none';
+        });
+    }
+
+    async function toggleMod(n, e) {
+        const fd = new FormData();
+        fd.append('name', n);
+        fd.append('enabled', e);
+        await apiCall('mod_toggle', fd);
+        loadMods(); // 刷新列表
+    }
+
+    async function uploadMod() {
+        const inp = document.getElementById('mod-upload-input');
+        if (inp.files.length === 0) return showToast('请选择 .zip 文件', 'error');
+        const fd = new FormData();
+        for (let f of inp.files) fd.append('file[]', f);
+        fd.append('action', 'mod_upload');
+        const btn = document.querySelector('button[onclick="uploadMod()"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 上传中...';
+        try {
+            await apiCall('mod_upload', fd);
+            inp.value = '';
+            loadMods();
+            showToast('模组上传成功', 'success');
+        } catch (e) {
+            showToast('上传失败', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '本地上传';
+        }
+    }
+
+    async function delMod(f) {
+        if (!confirm(`确认删除模组 "${f}"？`)) return;
+        const fd = new FormData();
+        fd.append('filename', f);
+        fd.append('action', 'mod_delete');
+        await apiCall('mod_delete', fd);
+        loadMods();
+    }
+
+    // === Mod 门户 ===
+async function searchModPortal() {
+    const q = document.getElementById('portal-search').value.trim();
+    const list = document.getElementById('portal-results');
+    list.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary"></div><small>搜索中...</small></div>';
+
+    try {
+        const url = `../../api.php?action=mod_portal_search${q ? '&q=' + encodeURIComponent(q) : ''}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        list.innerHTML = '';
+        if (!data.results || data.results.length === 0) {
+            list.innerHTML = '<div class="text-center text-muted py-3">未找到 Mod</div>';
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        data.results.forEach(m => {
+            const safeName = escapeAttr(m.name);
+            const safeTitle = escapeHtml(m.title || m.name);
+            const safeVersion = escapeHtml(m.latest_release ? m.latest_release.version : 'N/A');
+            const safeSummary = escapeHtml(m.summary || 'No description');
+            const safeOwner = escapeHtml(m.owner || 'Unknown');
+            
+            const item = document.createElement('div');
+            item.className = 'list-group-item';
+            item.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div style="flex:1">
+                        <h6 class="mb-1 text-primary fw-bold">${safeTitle} <small class="text-muted">v${safeVersion}</small></h6>
+                        <p class="mb-1 small text-secondary">${safeSummary}</p>
+                        <small class="text-muted">下载: ${m.downloads_count || 0} | 作者: ${safeOwner}</small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="installModFromPortal('${safeName}')">安装</button>
+                </div>`;
+            fragment.appendChild(item);
+        });
+        list.appendChild(fragment);
+    } catch (e) {
+        list.innerHTML = '<div class="text-danger text-center py-3">搜索失败: ' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+    async function installModFromPortal(name) {
+        const u = document.getElementById('factorio-user').value.trim();
+        const t = document.getElementById('factorio-token').value.trim();
+        if (!u || !t) return showToast('请填写用户名和 Token', 'error');
+        if (!confirm(`从 Mod 门户下载并安装 "${name}"？`)) return;
+        const fd = new FormData();
+        fd.append('name', name);
+        fd.append('username', u);
+        fd.append('token', t);
+        fd.append('action', 'mod_portal_install');
+        await apiCall('mod_portal_install', fd);
+        bootstrap.Modal.getInstance(document.getElementById('modPortalModal')).hide();
+        loadMods();
+    }
+
+    // === 文件管理 ===
+    // 刷新存档列表时，顺便显示历史记录
+async function refreshMapList() {
+    const version = document.getElementById('version-select').value;
+    const r = await fetch(`../../api.php?action=files&type=map&version=${encodeURIComponent(version)}&t=${Date.now()}`);
+    const d = await r.json();
+    const sel = document.getElementById('map-select');
+    const hist = document.getElementById('save-history');
+    
+    sel.innerHTML = '<option disabled>加载中...</option>';
+    hist.innerHTML = '';
+
+    if (!d.files || !d.files.length) {
+        sel.innerHTML = '<option disabled>无存档</option>';
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    
+    d.files.forEach(f => {
+        // 下拉菜单
+        const displayName = escapeHtml(f.display || f.filename);
+        const opt = new Option(`${displayName} (${f.size}MB)`, f.filename);
+        if (f.is_current) opt.selected = true;
+        sel.add(opt);
+
+        // 历史列表
+        const active = f.is_current ? 'list-group-item-success' : '';
+        const safeFilename = escapeAttr(f.filename);
+        const safeVersion = escapeAttr(version);
+        
+        const item = document.createElement('a');
+        item.href = 'javascript:void(0)';
+        item.className = `list-group-item list-group-item-action d-flex justify-content-between align-items-center ${active}`;
+        item.innerHTML = `
+            <div>
+                <div class="fw-600">${displayName}</div>
+                <small class="text-muted">${new Date(f.time*1000).toLocaleString()} · ${f.size} MB</small>
+            </div>
+            ${!f.is_current ? `<button class="btn btn-sm btn-outline-primary" onclick="useThisSave('${safeFilename}', ${f.size}, '${safeVersion}')">使用此存档</button>` : '<span class="badge bg-success">当前使用</span>'}`;
+        fragment.appendChild(item);
+    });
+    
+    hist.appendChild(fragment);
+}
+
+// 进度条控制函数
+function showProgressModal(message) {
+    document.getElementById('progressMessage').textContent = message;
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressBar').ariaValueNow = 0;
+    document.getElementById('progressDetails').textContent = '';
+    document.getElementById('progressModalClose').disabled = true;
+    document.getElementById('progressModalCancel').disabled = true;
+    
+    const modal = new bootstrap.Modal(document.getElementById('progressModal'));
+    modal.show();
+}
+
+function updateProgress(percent, details) {
+    document.getElementById('progressBar').style.width = percent + '%';
+    document.getElementById('progressBar').ariaValueNow = percent;
+    if (details) {
+        document.getElementById('progressDetails').textContent = details;
+    }
+}
+
+function hideProgressModal() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('progressModal'));
+    if (modal) {
+        modal.hide();
+    }
+}
+
+// 一键切换存档（回档）- 停止服务器后直接用指定存档启动
+async function useThisSave(name, sizeMB, version) {
+    if (!confirm(`确认切换到存档：${name}？\n\n存档大小：${sizeMB} MB\n\n服务器将停止并使用此存档重新启动。`)) {
+        return;
+    }
+    
+    showProgressModal('正在切换存档...');
+    updateProgress(30, '正在停止服务器...');
+    
+    try {
+        const fd = new FormData();
+        fd.append('filename', name);
+        fd.append('version', version);
+        
+        updateProgress(50, '正在切换存档并重启服务器...');
+        
+        const response = await fetch('../../api.php?action=set_current_save', {
+            method: 'POST',
+            body: fd
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showToast(data.error, 'error');
+            hideProgressModal();
+            return;
+        }
+        
+        updateProgress(100, '切换完成！');
+        showToast(data.message || '存档切换成功！', 'success');
+        refreshMapList();
+        setTimeout(() => hideProgressModal(), 500);
+        
+    } catch (e) {
+        showToast('切换存档失败：' + (e.message || '未知错误'), 'error');
+        hideProgressModal();
+    }
+}
+    async function refreshConfigList() { loadDropdown('config', 'config-select'); }
+
+    function updateConfigEditLink() {
+        const select = document.getElementById('config-select');
+        const link = document.getElementById('config-edit-link');
+        if (select && link) {
+            const selectedFile = select.value;
+            link.href = '../../configEditor.php?file=' + encodeURIComponent(selectedFile.replace(/\.json$/i, ''));
+        }
+    }
+
+    async function loadDropdown(type, id) {
+        try {
+            const r = await fetch(`../../api.php?action=files&type=${type}`);
+            const d = await r.json();
+            const s = document.getElementById(id);
+            s.innerHTML = '';
+            if (d.files && d.files.length) {
+                d.files.forEach(f => s.innerHTML += `<option value="${f.filename}">${f.filename}</option>`);
+                s.selectedIndex = 0;
+                if (type === 'config') updateConfigEditLink();
+            } else {
+                s.innerHTML = '<option disabled>无文件</option>';
+            }
+        } catch (e) { showToast('加载列表失败', 'error'); }
+    }
+
+    async function loadAllFiles() {
+        loadFiles('map', 'file-list-map');
+        loadFiles('config', 'file-list-config');
+    }
+
+    async function loadFiles(type, id) {
+        try {
+            const r = await fetch(`../../api.php?action=files&type=${type}`);
+            const d = await r.json();
+            const el = document.getElementById(id);
+            el.innerHTML = '';
+            if (!d.files || !d.files.length) {
+                el.innerHTML = '<div class="text-center text-muted small py-2">无文件</div>';
+                return;
+            }
+            d.files.forEach(f => {
+                const dl = type !== 'config' ? `<a href="../../api.php?action=download&filename=${f.filename}&type=${type}" class="btn btn-sm btn-link text-success p-0 me-2" download><i class="bi bi-download"></i></a>` : '';
+                el.innerHTML += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span class="flex-grow-1">${f.filename}</span>
+                        <div>${dl}<button onclick="delFile('${f.filename}','${type}')" class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-trash"></i></button></div>
+                    </div>`;
+            });
+        } catch (e) { showToast('加载文件失败', 'error'); }
+    }
+
+    window.delFile = async (n, t) => {
+        if (!confirm(`确认删除 "${n}"？`)) return;
+        const fd = new FormData();
+        fd.append('filename', n);
+        fd.append('type', t);
+        fd.append('action', 'delete_file');
+        await apiCall('delete_file', fd);
+        loadAllFiles();
+        refreshMapList();
+        refreshConfigList();
+    };
+
+    // === 玩家管理 ===
+    async function loadPlayerLists() {
+        try {
+            const r = await fetch('../../api.php?action=player_lists');
+            const d = await r.json();
+            console.log('玩家列表数据:', d);
+            
+            fillListSafe('list-admins', d.admins);
+            fillListSafe('list-bans', d.bans);
+            fillListSafe('list-whitelist', d.whitelist);
+            
+            showToast('玩家列表已刷新', 'success');
+        } catch (e) {
+            console.error('加载玩家列表失败:', e);
+            showToast('加载玩家列表失败: ' + (e.message || e), 'error');
+        }
+    }
+
+    function fillListSafe(id, list) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        
+        const playerList = Array.isArray(list) ? list : [];
+        
+        if (playerList.length === 0) {
+            el.innerHTML = '<div class="text-center text-muted small p-2">无记录</div>';
+            return;
+        }
+        
+        const fragment = document.createDocumentFragment();
+        
+        playerList.forEach(p => {
+            const name = typeof p === 'string' ? p : (p.username || p.name || '');
+            if (!name) return;
+            
+            const btn = document.createElement('button');
+            btn.className = 'list-group-item list-group-item-action py-1 small';
+            btn.textContent = name;
+            btn.onclick = function() {
+                const input = document.getElementById('target-player');
+                if (input) {
+                    input.value = name;
+                    input.focus();
+                }
+            };
+            fragment.appendChild(btn);
+        });
+        
+        el.innerHTML = '';
+        el.appendChild(fragment);
+    }
+
+    function doAction(type) {
+        const n = safePlayerName(document.getElementById('target-player').value.trim());
+        if (!n) return showToast('请输入玩家名', 'error');
+        if (n.length < 1 || n.length > 50) return showToast('玩家名格式无效', 'error');
+        const cmds = {
+            ban: `/ban ${n}`,
+            kick: `/kick ${n}`,
+            unban: `/unban ${n}`,
+            promote: `/promote ${n}`,
+            'wl-add': `/whitelist add ${n}`,
+            'wl-remove': `/whitelist remove ${n}`
+        };
+        if (!confirm(`确认执行 "${type}" 操作于 "${n}"？`)) return;
+        const fd = new FormData();
+        fd.append('cmd', cmds[type]);
+        fd.append('action', 'console');
+        apiCall('console', fd).then(() => setTimeout(loadPlayerLists, 1000));
+    }
+
+    // === 服务器控制 ===
+window.controlServer = async (act) => {
+    try {
+        const fd = new FormData(document.getElementById('startForm'));
+        fd.append('action', act);
+        const res = await apiCall(act, fd);
+        // 无论 error 或 message，都显示（已优化后端返回 message）
+        if (res.message) showToast(res.message, 'info');  // info 而非 error，避免抛异常
+        probe(); // 刷新状态
+    } catch (e) {
+        console.error('Server control failed:', e);
+        showToast('操作失败: ' + (e || '未知错误'), 'error');
+    }
+};
+
+    window.saveGame = async () => {
+        const fd = new FormData();
+        fd.append('action', 'save_game');
+        
+        try {
+            showToast('正在保存游戏，请稍候...', 'info');
+            
+            const result = await apiCall('save_game', fd);
+            
+            // 刷新存档列表
+            await refreshMapList();
+            
+            showToast(result.message || '游戏保存成功！', 'success');
+        } catch (e) {
+            showToast('保存失败：' + (e.message || '未知错误'), 'error');
+        }
+    };
+
+    // === 版本更新 ===
+    async function checkUpdate() {
+        const modal = new bootstrap.Modal(document.getElementById('updateModal'));
+        modal.show();
+        document.getElementById('ver-stable').innerText = '...';
+        document.getElementById('ver-exp').innerText = '...';
+        document.getElementById('update-log').classList.add('d-none');
+        try {
+            const r = await fetch('../../api.php?action=update_check');
+            const d = await r.json();
+            
+            document.getElementById('ver-stable').innerText = d.stable || 'N/A';
+            document.getElementById('ver-exp').innerText = d.experimental || 'N/A';
+            
+            const updateLog = document.getElementById('update-log');
+            updateLog.classList.remove('d-none');
+            
+            let logHtml = '<div class="mb-2"><strong>当前版本：</strong> ' + (d.current || 'unknown') + '</div>';
+            
+            if (d.stable && d.current && d.current !== 'unknown') {
+                if (versionCompare(d.stable, d.current) > 0) {
+                    logHtml += '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>发现新版本！稳定版 v' + d.stable + ' 可用</div>';
+                } else if (d.stable === d.current) {
+                    logHtml += '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>当前已是最新版本</div>';
+                } else {
+                    logHtml += '<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>当前版本比最新稳定版还要新</div>';
+                }
+            }
+            
+            updateLog.innerHTML = logHtml;
+        } catch (e) { 
+            showToast('检查更新失败', 'error'); 
+            document.getElementById('update-log').classList.remove('d-none');
+            document.getElementById('update-log').innerHTML = '<div class="alert alert-danger">检查更新失败: ' + (e.message || '未知错误') + '</div>';
+        }
+    }
+    
+    function versionCompare(v1, v2) {
+        const parts1 = v1.split('.').map(Number);
+        const parts2 = v2.split('.').map(Number);
+        
+        for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+            const p1 = parts1[i] || 0;
+            const p2 = parts2[i] || 0;
+            if (p1 > p2) return 1;
+            if (p1 < p2) return -1;
+        }
+        return 0;
+    }
+
+    async function installVer(v) {
+        if (!v || !confirm(`确认安装版本 "${v}"？服务器将重启。`)) return;
+        const log = document.getElementById('update-log');
+        log.classList.remove('d-none');
+        log.innerText = '下载中...';
+        const fd = new FormData();
+        fd.append('version', v);
+        fd.append('action', 'update_install');
+        try {
+            await apiCall('update_install', fd);
+            log.innerText = '安装成功！请重启服务器。';
+            loadLocalVersions();
+            showToast('版本安装成功', 'success');
+        } catch (e) {
+            log.innerText = '安装失败: ' + e.message;
+            showToast('安装失败', 'error');
+        }
+    }
+
+    async function loadLocalVersions() {
+        try {
+            const r = await fetch('../../api.php?action=get_versions');
+            const d = await r.json();
+            const s = document.getElementById('version-select');
+            s.innerHTML = '';
+            if (d.versions && d.versions.length) {
+                d.versions.forEach(v => s.innerHTML += `<option value="${v.id}">${v.name}</option>`);
+                s.selectedIndex = 0;
+            } else {
+                s.innerHTML = '<option disabled>无版本</option>';
+            }
+        } catch (e) { showToast('加载版本失败', 'error'); }
+    }
+
+// 折叠/展开监控面板
+function toggleMonitor() {
+    const container = document.getElementById('monitor-container');
+    const icon = document.getElementById('monitor-toggle-icon');
+    container.classList.toggle('collapsed');
+    if (container.classList.contains('collapsed')) {
+        icon.className = 'bi bi-chevron-down';
+    } else {
+        icon.className = 'bi bi-chevron-up';
+    }
+    setTimeout(() => fitAddon.fit(), 350);
+}
+
+// ==================== 日志查看器功能 ====================
+let logEntries = [];
+let currentFilter = 'chat';
+const MAX_LOG_ENTRIES = 1000;
+let logHistoryOffset = 0;
+let logHistoryTotal = 0;
+let isLoadingLogHistory = false;
+let hasMoreHistory = true;
+let isLoadingMore = false;
+
+// 页面加载时自动加载日志历史
+window.addEventListener('DOMContentLoaded', function() {
+    if (logEntries.length === 0) {
+        loadLogHistory();
+    }
+    initLogScrollListener();
+});
+
+// 初始化滚动监听（向上滚动加载更多）
+function initLogScrollListener() {
+    const logContent = document.getElementById('log-content');
+    if (!logContent) return;
+    
+    logContent.addEventListener('scroll', function() {
+        if (this.scrollTop < 50 && hasMoreHistory && !isLoadingMore && !isLoadingLogHistory) {
+            loadMoreLogHistory();
+        }
+        updateScrollButton(this);
+        updateLoadMoreButton();
+    });
+}
+
+function updateLoadMoreButton() {
+    const btn = document.getElementById('load-more-log');
+    if (!btn) return;
+    btn.style.display = hasMoreHistory ? 'block' : 'none';
+    if (isLoadingMore) {
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>加载中...';
+        btn.disabled = true;
+    } else {
+        btn.innerHTML = '<i class="bi bi-arrow-up-circle me-1"></i>加载更早的日志';
+        btn.disabled = false;
+    }
+}
+
+// 加载日志历史（从末尾加载最新的日志）
+async function loadLogHistory() {
+    if (isLoadingLogHistory) return;
+    isLoadingLogHistory = true;
+    updateLoadMoreButton();
+    
+    try {
+        const limit = 100;
+        const r = await fetch(`../../api.php?action=log_history&offset=0&limit=${limit}&from_end=true`);
+        const data = await r.json();
+        
+        if (data.success) {
+            logHistoryTotal = data.total;
+            logHistoryOffset = data.entries.length;
+            hasMoreHistory = data.hasMore;
+            
+            const batchEntries = data.entries.map(entry => processParsedEntry(entry)).filter(e => e);
+            logEntries = batchEntries;
+            
+            renderLogEntries();
+            updateLogCount();
+            updateLoadMoreButton();
+        }
+    } catch (e) {
+        console.error('加载日志历史失败:', e);
+    } finally {
+        isLoadingLogHistory = false;
+        updateLoadMoreButton();
+    }
+}
+
+// 加载更多历史日志（向上翻页）
+async function loadMoreLogHistory() {
+    if (isLoadingMore || !hasMoreHistory) return;
+    isLoadingMore = true;
+    updateLoadMoreButton();
+    
+    const logContent = document.getElementById('log-content');
+    const oldScrollHeight = logContent.scrollHeight;
+    
+    try {
+        const limit = 100;
+        const r = await fetch(`../../api.php?action=log_history&offset=${logHistoryOffset}&limit=${limit}&from_end=true`);
+        const data = await r.json();
+        
+        if (data.success && data.entries && data.entries.length > 0) {
+            const batchEntries = data.entries.map(entry => processParsedEntry(entry)).filter(e => e);
+            
+            logEntries = [...batchEntries, ...logEntries];
+            logHistoryOffset += data.entries.length;
+            hasMoreHistory = data.hasMore;
+            
+            if (logEntries.length > MAX_LOG_ENTRIES) {
+                logEntries = logEntries.slice(0, MAX_LOG_ENTRIES);
+            }
+            
+            const fragment = document.createDocumentFragment();
+            batchEntries.forEach(entry => {
+                if (currentFilter === 'all' || entry.type === currentFilter) {
+                    const logEntry = createLogEntryElement(entry);
+                    if (logEntry) {
+                        fragment.appendChild(logEntry);
+                    }
+                }
+            });
+            
+            logContent.insertBefore(fragment, logContent.firstChild);
+            
+            const newScrollHeight = logContent.scrollHeight;
+            logContent.scrollTop = newScrollHeight - oldScrollHeight;
+            
+            updateLogCount();
+            updateLoadMoreButton();
+        }
+    } catch (e) {
+        console.error('加载更多日志失败:', e);
+    } finally {
+        isLoadingMore = false;
+        updateLoadMoreButton();
+    }
+}
+
+// 更新日志计数
+function updateLogCount() {
+    const filteredCount = logEntries.filter(e => currentFilter === 'all' || e.type === currentFilter).length;
+    document.getElementById('log-count').textContent = `日志: ${filteredCount}/${logHistoryTotal}`;
+}
+
+// 渲染日志条目
+function renderLogEntries() {
+    const logContent = document.getElementById('log-content');
+    if (!logContent) return;
+    
+    const fragment = document.createDocumentFragment();
+    const maxRender = 200;
+    let count = 0;
+    
+    const filteredEntries = logEntries.filter(e => currentFilter === 'all' || e.type === currentFilter);
+    const entriesToRender = filteredEntries.slice(-maxRender);
+    
+    entriesToRender.forEach(entry => {
+        const logEntry = createLogEntryElement(entry);
+        if (logEntry) {
+            fragment.appendChild(logEntry);
+            count++;
+        }
+    });
+    
+    logContent.innerHTML = '';
+    logContent.appendChild(fragment);
+    logContent.scrollTop = logContent.scrollHeight;
+    
+    updateLogCount();
+}
+
+// 存储最近的IP连接请求，用于关联登录信息
+let recentIpRequests = [];
+const MAX_RECENT_IP_REQUESTS = 10; // 最多存储10个最近的IP请求
+let playerToIpMap = {}; // 玩家名到IP地址的映射
+
+// ==================== 玩家信息管理系统 ====================
+// 玩家信息结构：{ name: string, ip: string, lastSeen: timestamp, status: 'online'|'offline' }
+let playerInfoMap = {}; // 玩家名到详细信息的映射
+const MAX_PLAYER_INFO_HISTORY = 100; // 最多保存100个玩家的历史信息
+
+// 从localStorage加载玩家信息
+function loadPlayerInfoFromStorage() {
+    try {
+        const stored = localStorage.getItem('factorio_player_info');
+        if (stored) {
+            playerInfoMap = JSON.parse(stored);
+            console.log('[玩家信息] 从存储加载了', Object.keys(playerInfoMap).length, '个玩家');
+        }
+    } catch (e) {
+        console.error('[玩家信息] 加载失败:', e);
+        playerInfoMap = {};
+    }
+}
+
+// 保存玩家信息到localStorage
+function savePlayerInfoToStorage() {
+    try {
+        // 限制存储数量
+        const entries = Object.entries(playerInfoMap);
+        if (entries.length > MAX_PLAYER_INFO_HISTORY) {
+            // 按最后 seen 时间排序，保留最新的
+            entries.sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0));
+            playerInfoMap = Object.fromEntries(entries.slice(0, MAX_PLAYER_INFO_HISTORY));
+        }
+        localStorage.setItem('factorio_player_info', JSON.stringify(playerInfoMap));
+    } catch (e) {
+        console.error('[玩家信息] 保存失败:', e);
+    }
+}
+
+// 更新或添加玩家信息
+function updatePlayerInfo(playerName, info) {
+    if (!playerName) return;
+    
+    const existing = playerInfoMap[playerName] || {};
+    playerInfoMap[playerName] = {
+        ...existing,
+        name: playerName,
+        ...info,
+        lastSeen: Date.now()
+    };
+    
+    // 如果是上线，记录登录时间
+    if (info.status === 'online' && !existing.lastLogin) {
+        playerInfoMap[playerName].lastLogin = Date.now();
+    }
+    
+    // 如果是下线，记录登出时间
+    if (info.status === 'offline') {
+        playerInfoMap[playerName].lastLogout = Date.now();
+    }
+    
+    // 同时更新IP映射
+    if (info.ip) {
+        playerToIpMap[playerName] = info.ip;
+    }
+    
+    savePlayerInfoToStorage();
+    
+    // 如果玩家面板是可见的，刷新下拉列表
+    refreshPlayerDropdown();
+    
+    // 刷新已知玩家列表
+    renderKnownPlayersList();
+}
+
+// 从服务器获取真正的在线玩家列表
+async function fetchOnlinePlayers() {
+    try {
+        const response = await fetch('../../api.php?action=online_players');
+        const data = await response.json();
+        
+        if (data.success && data.source === 'rcon') {
+            const onlineNames = new Set(data.players.map(p => p.name));
+            
+            // 更新所有玩家的状态
+            Object.keys(playerInfoMap).forEach(name => {
+                const isOnline = onlineNames.has(name);
+                const currentStatus = playerInfoMap[name].status;
+                
+                if (isOnline && currentStatus !== 'online') {
+                    // 玩家上线了
+                    playerInfoMap[name].status = 'online';
+                    playerInfoMap[name].lastLogin = Date.now();
+                    delete playerInfoMap[name].lastLogout;
+                } else if (!isOnline && currentStatus === 'online') {
+                    // 玩家下线了
+                    playerInfoMap[name].status = 'offline';
+                    playerInfoMap[name].lastLogout = Date.now();
+                }
+            });
+            
+            // 添加新发现的在线玩家
+            data.players.forEach(p => {
+                if (!playerInfoMap[p.name]) {
+                    playerInfoMap[p.name] = {
+                        name: p.name,
+                        status: 'online',
+                        lastLogin: Date.now(),
+                        lastSeen: Date.now()
+                    };
+                }
+            });
+            
+            savePlayerInfoToStorage();
+            renderKnownPlayersList();
+        }
+        
+        return data;
+    } catch (e) {
+        console.error('获取在线玩家失败:', e);
+        return { success: false, players: [] };
+    }
+}
+
+// 获取玩家信息
+function getPlayerInfo(playerName) {
+    return playerInfoMap[playerName] || null;
+}
+
+// 搜索玩家（支持名称和IP模糊搜索）
+function searchPlayers(query) {
+    if (!query) return [];
+    query = query.toLowerCase();
+    
+    return Object.values(playerInfoMap).filter(p => {
+        const nameMatch = p.name && p.name.toLowerCase().includes(query);
+        const ipMatch = p.ip && p.ip.toLowerCase().includes(query);
+        return nameMatch || ipMatch;
+    }).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0)); // 最近活跃的排在前面
+}
+
+// 获取所有已知玩家列表
+function getAllKnownPlayers() {
+    return Object.values(playerInfoMap).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+}
+
+// 渲染已知玩家列表到面板
+function renderKnownPlayersList() {
+    const container = document.getElementById('known-players-list');
+    if (!container) return;
+    
+    const players = getAllKnownPlayers();
+    
+    if (players.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted small p-3">暂无玩家数据，等待玩家登录...</div>';
+        return;
+    }
+    
+    const now = Date.now();
+    const fragment = document.createDocumentFragment();
+    
+    players.forEach(p => {
+        const isOnline = p.status === 'online';
+        const statusIcon = isOnline ? '🟢' : '⚪';
+        const statusClass = isOnline ? 'text-success' : 'text-secondary';
+        const safeName = escapeAttr(p.name);
+        const displayName = escapeHtml(p.name);
+        const ipText = p.ip ? `<small class="text-muted font-monospace">${escapeHtml(p.ip)}</small>` : '';
+        
+        // 计算在线/离线时长
+        let durationText = '';
+        if (isOnline && p.lastLogin) {
+            const duration = now - p.lastLogin;
+            durationText = `<small class="text-success">在线 ${formatDuration(duration)}</small>`;
+        } else if (!isOnline && p.lastLogout) {
+            const duration = now - p.lastLogout;
+            durationText = `<small class="text-muted">离线 ${formatDuration(duration)}</small>`;
+        } else if (p.lastSeen) {
+            durationText = `<small class="text-muted">${formatTimeAgo(p.lastSeen)}</small>`;
+        }
+        
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action py-2';
+        item.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="me-2">${statusIcon}</span>
+                    <span class="fw-bold ${statusClass}">${displayName}</span>
+                    ${ipText}
+                </div>
+                <div>${durationText}</div>
+            </div>`;
+        item.onclick = function() {
+            selectPlayer(safeName);
+            return false;
+        };
+        fragment.appendChild(item);
+    });
+    
+    container.innerHTML = '';
+    container.appendChild(fragment);
+}
+
+// 格式化时长（秒数转为可读格式）
+function formatDuration(ms) {
+    if (!ms || ms < 0) return '';
+    
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) {
+        return `${days}天${hours % 24}时`;
+    } else if (hours > 0) {
+        return `${hours}时${minutes % 60}分`;
+    } else if (minutes > 0) {
+        return `${minutes}分`;
+    } else {
+        return `${seconds}秒`;
+    }
+}
+
+// 页面加载时初始化
+loadPlayerInfoFromStorage();
+
+// === 统一定时器管理（带页面可见性检测）===
+let pageTimers = {
+    probe: null,
+    status: null,
+    players: null,
+    onlineCheck: null,
+    autoResponder: null
+};
+
+let isPageVisible = true;
+
+function startAllTimers() {
+    stopAllTimers();
+    
+    pageTimers.probe = setInterval(probe, 2000);
+    pageTimers.status = setInterval(refreshCurrentServerStatus, 5000);
+    pageTimers.players = setInterval(renderKnownPlayersList, 5000);
+    pageTimers.onlineCheck = setInterval(fetchOnlinePlayers, 30000);
+    pageTimers.autoResponder = setInterval(checkAutoResponderStatus, 5000);
+}
+
+function stopAllTimers() {
+    Object.values(pageTimers).forEach(timer => {
+        if (timer) clearInterval(timer);
+    });
+}
+
+function handleVisibilityChange() {
+    isPageVisible = !document.hidden;
+    
+    if (isPageVisible) {
+        startAllTimers();
+        probe();
+        refreshCurrentServerStatus();
+        fetchOnlinePlayers();
+        checkAutoResponderStatus();
+        startLogStreaming();
+    } else {
+        stopAllTimers();
+        stopLogStreaming();
+    }
+}
+
+document.addEventListener('visibilitychange', handleVisibilityChange);
+
+// 初始化定时器
+startAllTimers();
+
+// 更新玩家信息
+function updatePlayerInfo(player, info) {
+    // 可以扩展用于存储玩家信息
+}
+
+// 处理服务器端已解析的日志条目（补充前端特有逻辑）
+function processParsedEntry(entry) {
+    if (!entry) return null;
+    
+    // 处理登录/登出时的 IP 信息
+    if (entry.type === 'login' && entry.player) {
+        let ip = '';
+        for (let i = recentIpRequests.length - 1; i >= 0; i--) {
+            if (recentIpRequests[i].time && 
+                Math.abs(new Date(entry.timestamp) - new Date(recentIpRequests[i].time)) < 60000) {
+                ip = recentIpRequests[i].ip;
+                break;
+            }
+        }
+        if (!ip) {
+            ip = playerToIpMap[entry.player] || '';
+        }
+        updatePlayerInfo(entry.player, {
+            ip: ip,
+            status: 'online',
+            lastLogin: new Date(entry.timestamp).getTime()
+        });
+        if (ip) {
+            entry.message = `${entry.player} 在 ${ip} 上线`;
+        }
+    } else if (entry.type === 'logout' && entry.player) {
+        updatePlayerInfo(entry.player, {
+            status: 'offline',
+            lastLogout: new Date(entry.timestamp).getTime()
+        });
+    }
+    
+    // 处理原始日志中的 IP 连接信息
+    if (entry.raw && (entry.raw.includes('ConnectionRequestReplyConfirm') || entry.raw.includes('Refusing connection'))) {
+        const ipMatch = entry.raw.match(/IP ADDR:\(\{([\d.]+):\d+\}\)/);
+        if (ipMatch) {
+            const ip = ipMatch[1];
+            const playerMatch = entry.raw.match(/username\s*\(([^)]+)\)/);
+            const player = playerMatch ? playerMatch[1] : null;
+            
+            recentIpRequests.push({ ip, time: entry.timestamp, player });
+            if (recentIpRequests.length > MAX_RECENT_IP_REQUESTS) {
+                recentIpRequests.shift();
+            }
+            
+            if (player) {
+                playerToIpMap[player] = ip;
+            }
+            return null; // 不显示这条日志
+        }
+    }
+    
+    return entry;
+}
+
+// 实时日志批量处理
+let logBatch = [];
+const LOG_BATCH_SIZE = 10; // 每10条日志批量处理一次
+const LOG_BATCH_DELAY = 100; // 100ms延迟
+let logBatchTimer = null;
+// 日志查看器展开状态（默认展开）
+let isLogViewerExpanded = true;
+
+// 检测用户是否在日志底部附近
+function isScrolledToBottom(element) {
+    if (!element) return true;
+    const threshold = 150; // 距离底部150px以内视为"在底部"
+    return element.scrollHeight - element.scrollTop - element.clientHeight < threshold;
+}
+
+// 智能滚动：只有用户在底部时才自动滚动
+function smartScrollToBottom(element) {
+    if (isScrolledToBottom(element)) {
+        element.scrollTop = element.scrollHeight;
+    }
+    updateScrollButton(element);
+}
+
+// 一键返回最新消息
+function scrollLogToBottom() {
+    const logContent = document.getElementById('log-content');
+    if (logContent) {
+        logContent.scrollTop = logContent.scrollHeight;
+        updateScrollButton(logContent);
+    }
+}
+
+// 更新"返回最新消息"按钮的显示状态
+function updateScrollButton(element) {
+    const btn = document.getElementById('scroll-to-bottom');
+    if (!btn || !element) return;
+    
+    if (!isScrolledToBottom(element)) {
+        btn.style.display = 'block';
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+// 初始化滚动按钮监听器
+function initScrollButtonListener() {
+    const logContent = document.getElementById('log-content');
+    if (logContent) {
+        logContent.addEventListener('scroll', () => {
+            updateScrollButton(logContent);
+        });
+    }
+}
+
+function addLogEntry(entry) {
+    if (!entry) return;
+    
+    // 处理服务器端已解析的条目（补充前端特有逻辑）
+    entry = processParsedEntry(entry);
+    if (!entry) return;
+    
+    // 添加到批处理队列（无论面板是否展开，都需要添加到队列中）
+    logBatch.push(entry);
+    
+    // 启动批处理计时器
+    if (!logBatchTimer) {
+        logBatchTimer = setTimeout(() => {
+            processLogBatch();
+        }, LOG_BATCH_DELAY);
+    }
+}
+
+function processLogBatch() {
+    if (logBatch.length === 0) {
+        logBatchTimer = null;
+        return;
+    }
+    
+    const batch = [...logBatch];
+    logBatch = [];
+    
+    logEntries.push(...batch);
+    logHistoryTotal += batch.length;
+    
+    if (logEntries.length > MAX_LOG_ENTRIES) {
+        const removeCount = logEntries.length - MAX_LOG_ENTRIES;
+        logEntries.splice(0, removeCount);
+    }
+    
+    if (isLogViewerExpanded) {
+        requestAnimationFrame(() => {
+            const logContent = document.getElementById('log-content');
+            if (!logContent) return;
+            
+            const fragment = document.createDocumentFragment();
+            
+            batch.forEach(entry => {
+                if (currentFilter === 'all' || entry.type === currentFilter) {
+                    const logEntry = createLogEntryElement(entry);
+                    if (logEntry) {
+                        fragment.appendChild(logEntry);
+                    }
+                }
+            });
+            
+            const wasAtBottom = isScrolledToBottom(logContent);
+            
+            logContent.appendChild(fragment);
+            
+            const maxDomEntries = 300;
+            if (logContent.children.length > maxDomEntries) {
+                const removeCount = logContent.children.length - maxDomEntries;
+                if (removeCount > 0 && logContent.children[removeCount - 1]) {
+                    const range = document.createRange();
+                    range.setStartBefore(logContent.firstChild);
+                    range.setEndBefore(logContent.children[removeCount]);
+                    range.deleteContents();
+                }
+            }
+            
+            if (wasAtBottom) {
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+            
+            updateScrollButton(logContent);
+            
+            updateLogCount();
+        });
+    }
+    
+    logBatchTimer = null;
+}
+
+function filterLogEntries(filter) {
+    currentFilter = filter;
+    const logContent = document.getElementById('log-content');
+    logContent.innerHTML = '';
+    
+    document.querySelectorAll('.log-filter').forEach(btn => {
+        if (btn.dataset.filter === filter) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    
+    const fragment = document.createDocumentFragment();
+    let renderedCount = 0;
+    const maxRender = 300;
+    
+    const filteredEntries = logEntries.filter(e => filter === 'all' || e.type === filter);
+    const entriesToRender = filteredEntries.slice(-maxRender);
+    
+    entriesToRender.forEach(entry => {
+        const logEntry = createLogEntryElement(entry);
+        if (logEntry) {
+            fragment.appendChild(logEntry);
+            renderedCount++;
+        }
+    });
+    
+    logContent.appendChild(fragment);
+    logContent.scrollTop = logContent.scrollHeight;
+    
+    updateLogCount();
+}
+
+function createLogEntryElement(entry) {
+    if (!entry) return null;
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${entry.type || 'system'}`;
+    
+    const time = entry.timestamp || '';
+    
+    if (entry.type === 'chat' && entry.player) {
+        logEntry.innerHTML = `
+            <span class="log-time">${escapeHtml(time)}</span>
+            <span class="log-message"><strong>${escapeHtml(entry.player)}</strong>: ${escapeHtml(entry.message || '')}</span>
+        `;
+    } else if (entry.type === 'login' && entry.player) {
+        logEntry.innerHTML = `
+            <span class="log-time">${escapeHtml(time)}</span>
+            <span class="log-message"><i class="bi bi-box-arrow-in-right text-success me-1"></i>${escapeHtml(entry.player)} 加入了游戏</span>
+        `;
+    } else if (entry.type === 'logout' && entry.player) {
+        logEntry.innerHTML = `
+            <span class="log-time">${escapeHtml(time)}</span>
+            <span class="log-message"><i class="bi bi-box-arrow-right text-warning me-1"></i>${escapeHtml(entry.player)} 离开了游戏</span>
+        `;
+    } else if (entry.type === 'save') {
+        logEntry.innerHTML = `
+            <span class="log-time">${escapeHtml(time)}</span>
+            <span class="log-message"><i class="bi bi-save text-info me-1"></i>${escapeHtml(entry.message || '游戏已保存')}</span>
+        `;
+    } else {
+        logEntry.innerHTML = `
+            <span class="log-time">${escapeHtml(time)}</span>
+            <span class="log-message">${escapeHtml(entry.message || entry.raw || '')}</span>
+        `;
+    }
+    
+    return logEntry;
+}
+
+function clearLogViewer() {
+    logEntries = [];
+    logHistoryOffset = 0;
+    logHistoryTotal = 0;
+    hasMoreHistory = true;
+    document.getElementById('log-content').innerHTML = '';
+    updateLogCount();
+}
+
+// 实时日志流用于游戏日志分析
+let logEventSource = null;
+let logReconnectTimer = null;
+
+function startLogStreaming() {
+    const logContent = document.getElementById('log-content');
+    if (!logContent) return;
+    
+    if (logEventSource) {
+        logEventSource.close();
+    }
+    
+    logEventSource = new EventSource('../../logWs.php');
+    
+    logEventSource.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'connected') {
+                return;
+            }
+            
+            if (data.entries && Array.isArray(data.entries)) {
+                data.entries.forEach(entry => {
+                addLogEntry(entry);
+            });
+            } else if (data.type) {
+                addLogEntry(data);
+            }
+        } catch (e) {
+            console.warn('解析日志数据失败', e);
+        }
+    };
+    
+    logEventSource.onerror = (err) => {
+        console.warn('log stream error', err);
+        if (logEventSource) {
+            logEventSource.close();
+            logEventSource = null;
+        }
+        if (!logReconnectTimer) {
+            logReconnectTimer = setTimeout(() => {
+                logReconnectTimer = null;
+                if (isPageVisible) {
+                    startLogStreaming();
+                }
+            }, 5000);
+        }
+    };
+}
+
+function stopLogStreaming() {
+    if (logEventSource) {
+        logEventSource.close();
+        logEventSource = null;
+    }
+    if (logReconnectTimer) {
+        clearTimeout(logReconnectTimer);
+        logReconnectTimer = null;
+    }
+}
+
+window.addEventListener('beforeunload', stopLogStreaming);
+
+// ==================== 聊天发送功能 ====================
+// 存储定时发送任务
+let scheduledTasks = [];
+// 存储条件触发响应
+let triggerResponses = [];
+// 存储服务器响应配置
+let serverResponses = [];
+// 存储玩家事件设置
+let playerEvents = {
+    welcome: { enabled: false, message: '' },
+    goodbye: { enabled: false, message: '' },
+    firstJoinGift: { enabled: false, items: '' },
+    rejoinGift: { enabled: false, items: '' }
+};
+let playerEventsLoaded = false;
+
+// 从服务端加载设置
+function loadFromServer() {
+    fetch('../../chatSettings.php?action=get')
+        .then(response => response.json())
+        .then(data => {
+            if (data.scheduledTasks) {
+                scheduledTasks = data.scheduledTasks;
+                updateScheduledList();
+            }
+            if (data.triggerResponses) {
+                triggerResponses = data.triggerResponses;
+                updateTriggerList();
+            }
+            if (data.serverResponses) {
+                serverResponses = data.serverResponses;
+            }
+            if (data.playerEvents) {
+                playerEvents = data.playerEvents;
+                playerEventsLoaded = true;
+                if (itemsLoaded) {
+                    updatePlayerEventUI();
+                }
+            }
+            loadServerResponses();
+        })
+        .catch(error => {
+            console.error('加载设置失败:', error);
+        });
+}
+
+// 保存设置到服务端
+function saveToServer() {
+    fetch('../../chatSettings.php?action=save', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            scheduledTasks: scheduledTasks,
+            triggerResponses: triggerResponses,
+            serverResponses: serverResponses,
+            playerEvents: playerEvents
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            console.error('保存设置失败:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('保存设置失败:', error);
+    });
+}
+
+// 发送聊天消息
+function sendChatMessage() {
+    const message = document.getElementById('chat-input').value.trim();
+    
+    if (!message) return;
+    
+    const fd = new FormData();
+    fd.append('cmd', message);
+    fd.append('action', 'console');
+    
+    fetch('../../api.php', { method: 'POST', body: fd })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showToast(data.error, 'error');
+            } else {
+                document.getElementById('chat-input').value = '';
+                
+                if (data.response) {
+                    showToast('命令执行成功', 'success');
+                    
+                    const logContent = document.getElementById('log-content');
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'log-entry system';
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-message text-info">
+                            <strong>&gt; ${escapeHtml(message)}</strong>
+                            <br><pre class="mb-0 mt-1 small" style="white-space: pre-wrap; word-break: break-all;">${escapeHtml(data.response)}</pre>
+                        </span>
+                    `;
+                    logContent.appendChild(logEntry);
+                    // 用户执行命令后滚动到底部
+                    logContent.scrollTop = logContent.scrollHeight;
+                } else {
+                    showToast('命令已发送', 'success');
+                }
+            }
+        })
+        .catch(error => {
+            showToast('命令发送失败', 'error');
+            console.error('Error:', error);
+        });
+}
+
+// 处理重复选项的显示和隐藏
+function handleRepeatChange() {
+    const repeatSelect = document.getElementById('schedule-repeat');
+    const intervalInput = document.getElementById('schedule-interval');
+    const repeatValue = repeatSelect.value;
+    
+    // 当选择需要间隔的重复选项时显示间隔输入框
+    if (repeatValue === 'seconds' || repeatValue === 'minutes' || repeatValue === 'hours') {
+        intervalInput.style.display = 'block';
+    } else {
+        intervalInput.style.display = 'none';
+    }
+}
+
+// 初始化重复选项的事件监听
+document.getElementById('schedule-repeat').addEventListener('change', handleRepeatChange);
+
+// ==================== 定时任务功能 ====================
+function scheduleChatMessage() {
+    const message = document.getElementById('schedule-message').value.trim();
+    const time = document.getElementById('schedule-time').value;
+    const repeat = document.getElementById('schedule-repeat').value;
+    const interval = document.getElementById('schedule-interval').value;
+    
+    if (!message || !time) {
+        showToast('请填写消息内容和时间', 'warning');
+        return;
+    }
+    
+    // 检查是否需要间隔值
+    if ((repeat === 'seconds' || repeat === 'minutes' || repeat === 'hours') && (!interval || interval < 1)) {
+        showToast('请填写间隔时间', 'warning');
+        return;
+    }
+    
+    // 解析时间
+    const [hours, minutes] = time.split(':');
+    const now = new Date();
+    const scheduledTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+    
+    // 如果时间已过，设置为明天
+    if (scheduledTime < now) {
+        scheduledTime.setDate(scheduledTime.getDate() + 1);
+    }
+    
+    // 创建定时任务
+    const task = {
+        id: Date.now(),
+        message: message,
+        time: scheduledTime.toISOString(),
+        type: 'public',
+        repeat: repeat,
+        interval: interval
+    };
+    
+    // 添加到定时任务列表
+    scheduledTasks.push(task);
+    updateScheduledList();
+    saveToServer();
+    
+    // 清空输入框
+    document.getElementById('schedule-message').value = '';
+    document.getElementById('schedule-time').value = '';
+    document.getElementById('schedule-repeat').value = 'once';
+    document.getElementById('schedule-interval').value = '';
+    document.getElementById('schedule-interval').style.display = 'none';
+    
+    showToast('定时任务已添加', 'success');
+}
+
+function updateScheduledList() {
+    const list = document.getElementById('scheduled-list');
+    if (!list) return;
+    
+    list.innerHTML = '';
+    
+    if (scheduledTasks.length === 0) {
+        list.innerHTML = '<div class="text-muted text-sm">暂无定时任务</div>';
+        return;
+    }
+    
+    scheduledTasks.forEach((task, index) => {
+        const taskTime = new Date(task.time);
+        const timeStr = taskTime.toLocaleString('zh-CN', { 
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
+        
+        let repeatText = '';
+        if (task.repeat === 'once') {
+            repeatText = '仅一次';
+        } else if (task.repeat === 'daily') {
+            repeatText = '每天';
+        } else if (task.repeat === 'weekly') {
+            repeatText = '每周';
+        } else if (task.repeat === 'seconds') {
+            repeatText = `每${task.interval}秒`;
+        } else if (task.repeat === 'minutes') {
+            repeatText = `每${task.interval}分钟`;
+        } else if (task.repeat === 'hours') {
+            repeatText = `每${task.interval}小时`;
+        } else {
+            repeatText = '仅一次';
+        }
+        
+        const item = document.createElement('div');
+        item.className = 'd-flex justify-content-between align-items-center p-2 border-bottom';
+        const safeMessage = escapeHtml(task.message.substring(0, 25) + (task.message.length > 25 ? '...' : ''));
+        item.innerHTML = `
+            <div>
+                <span class="small">${safeMessage}</span>
+                <span class="badge bg-warning ms-1">${timeStr}</span>
+                <span class="badge bg-info ms-1">${repeatText}</span>
+            </div>
+            <button class="btn btn-xs btn-outline-danger" onclick="deleteScheduledTask(${index})">删除</button>
+        `;
+        list.appendChild(item);
+    });
+}
+
+function deleteScheduledTask(index) {
+    if (index >= 0 && index < scheduledTasks.length) {
+        scheduledTasks.splice(index, 1);
+        updateScheduledList();
+        saveToServer();
+        showToast('定时任务已删除', 'success');
+    }
+}
+
+// 添加条件触发响应
+function addTriggerResponse() {
+    const keyword = document.getElementById('trigger-keyword').value.trim();
+    const response = document.getElementById('trigger-response').value.trim();
+    
+    if (!keyword || !response) {
+        showToast('请填写关键词和响应内容', 'warning');
+        return;
+    }
+    
+    // 添加到触发响应列表
+    const trigger = {
+        id: Date.now(),
+        keyword: keyword,
+        response: response
+    };
+    triggerResponses.push(trigger);
+    
+    // 清空输入框
+    document.getElementById('trigger-keyword').value = '';
+    document.getElementById('trigger-response').value = '';
+    
+    // 更新触发响应列表显示
+    updateTriggerList();
+    
+    // 保存到服务端
+    saveToServer();
+    
+    showToast('触发响应已添加', 'success');
+}
+
+// 更新触发响应列表显示
+function updateTriggerList() {
+    const triggerList = document.getElementById('trigger-list');
+    const triggerListEmpty = document.getElementById('trigger-list-empty');
+    
+    // 清空列表
+    triggerList.innerHTML = '';
+    
+    if (triggerResponses.length === 0) {
+        // 显示空状态
+        triggerList.innerHTML = '<div class="text-muted text-sm" id="trigger-list-empty">暂无已添加的条件发送</div>';
+    } else {
+        // 显示已添加的触发响应
+        for (let i = 0; i < triggerResponses.length; i++) {
+            const trigger = triggerResponses[i];
+            const triggerItem = document.createElement('div');
+            triggerItem.className = 'd-flex justify-content-between align-items-center p-2 border-bottom last:border-bottom-0';
+            const safeKeyword = escapeHtml(trigger.keyword);
+            const safeResponse = escapeHtml(trigger.response);
+            triggerItem.innerHTML = `
+                <div>
+                    <strong>关键词:</strong> ${safeKeyword} <br>
+                    <strong>响应:</strong> ${safeResponse}
+                </div>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-xs btn-outline-warning" onclick="editTrigger(${i})">修改</button>
+                    <button class="btn btn-xs btn-outline-danger" onclick="deleteTrigger(${i})">删除</button>
+                </div>
+            `;
+            triggerList.appendChild(triggerItem);
+        }
+    }
+}
+
+// 编辑触发响应
+function editTrigger(index) {
+    const trigger = triggerResponses[index];
+    if (!trigger) return;
+    
+    // 填充到输入框
+    document.getElementById('trigger-keyword').value = trigger.keyword;
+    document.getElementById('trigger-response').value = trigger.response;
+    
+    // 删除原条目
+    deleteTrigger(index);
+    
+    showToast('请修改触发响应内容', 'info');
+}
+
+// 删除触发响应
+function deleteTrigger(index) {
+    if (index >= 0 && index < triggerResponses.length) {
+        triggerResponses.splice(index, 1);
+        updateTriggerList();
+        // 保存到服务端
+        saveToServer();
+        showToast('触发响应已删除', 'success');
+    }
+}
+
+// ==================== 玩家事件功能 ====================
+let giftItemsData = {
+    'first-join': [],
+    'rejoin': []
+};
+let currentGiftType = null;
+
+function updatePlayerEvents() {
+    const welcomeEnabled = document.getElementById('welcome-enabled').checked;
+    const welcomeMessage = document.getElementById('welcome-message').value.trim();
+    const goodbyeEnabled = document.getElementById('goodbye-enabled').checked;
+    const goodbyeMessage = document.getElementById('goodbye-message').value.trim();
+    const firstJoinGiftEnabled = document.getElementById('first-join-gift-enabled').checked;
+    const rejoinGiftEnabled = document.getElementById('rejoin-gift-enabled').checked;
+    
+    playerEvents = {
+        welcome: {
+            enabled: welcomeEnabled,
+            message: welcomeMessage,
+            type: 'public'
+        },
+        goodbye: {
+            enabled: goodbyeEnabled,
+            message: goodbyeMessage,
+            type: 'public'
+        },
+        firstJoinGift: {
+            enabled: firstJoinGiftEnabled,
+            items: giftItemsArrayToString(giftItemsData['first-join'])
+        },
+        rejoinGift: {
+            enabled: rejoinGiftEnabled,
+            items: giftItemsArrayToString(giftItemsData['rejoin'])
+        }
+    };
+    
+    saveToServer();
+}
+
+function updatePlayerEventUI() {
+    const welcomeEnabled = document.getElementById('welcome-enabled');
+    const welcomeMessage = document.getElementById('welcome-message');
+    const goodbyeEnabled = document.getElementById('goodbye-enabled');
+    const goodbyeMessage = document.getElementById('goodbye-message');
+    const firstJoinGiftEnabled = document.getElementById('first-join-gift-enabled');
+    const rejoinGiftEnabled = document.getElementById('rejoin-gift-enabled');
+    
+    if (welcomeEnabled) welcomeEnabled.checked = playerEvents.welcome?.enabled || false;
+    if (welcomeMessage) welcomeMessage.value = playerEvents.welcome?.message || '';
+    if (goodbyeEnabled) goodbyeEnabled.checked = playerEvents.goodbye?.enabled || false;
+    if (goodbyeMessage) goodbyeMessage.value = playerEvents.goodbye?.message || '';
+    if (firstJoinGiftEnabled) firstJoinGiftEnabled.checked = playerEvents.firstJoinGift?.enabled || false;
+    if (rejoinGiftEnabled) rejoinGiftEnabled.checked = playerEvents.rejoinGift?.enabled || false;
+    
+    giftItemsData['first-join'] = giftItemsStringToArray(playerEvents.firstJoinGift?.items || '');
+    giftItemsData['rejoin'] = giftItemsStringToArray(playerEvents.rejoinGift?.items || '');
+    
+    renderGiftItemsList('first-join');
+    renderGiftItemsList('rejoin');
+}
+
+function giftItemsStringToArray(str) {
+    if (!str || !str.trim()) return [];
+    const items = [];
+    const lines = str.trim().split('\n');
+    for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 1) {
+            const code = parts[0];
+            const count = parts.length >= 2 ? parseInt(parts[1]) || 1 : 1;
+            const name = getItemName(code);
+            items.push({ code, count, name });
+        }
+    }
+    return items;
+}
+
+function giftItemsArrayToString(items) {
+    if (!items || items.length === 0) return '';
+    return items.map(item => `${item.code} ${item.count}`).join('\n');
+}
+
+function getItemName(code) {
+    for (const cat in ITEMS) {
+        if (ITEMS[cat][code]) {
+            return ITEMS[cat][code];
+        }
+    }
+    return code;
+}
+
+function renderGiftItemsList(type) {
+    const container = document.getElementById(`${type}-gift-list`);
+    if (!container) return;
+    
+    const items = giftItemsData[type] || [];
+    
+    if (items.length === 0) {
+        container.innerHTML = `
+            <div class="gift-empty-hint">
+                <i class="bi bi-box-seam"></i>
+                <div>暂无物品，点击下方按钮添加</div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = items.map((item, index) => `
+        <div class="gift-item-row">
+            <div class="gift-item-icon">
+                <i class="bi bi-box-seam"></i>
+            </div>
+            <div class="gift-item-info">
+                <div class="gift-item-name">${escapeHtml(item.name)}</div>
+                <div class="gift-item-code">${escapeHtml(item.code)}</div>
+            </div>
+            <div class="gift-item-count">
+                <input type="number" class="form-control form-control-sm" 
+                       value="${item.count}" min="1" max="999999"
+                       onchange="updateGiftItemCount('${type}', ${index}, this.value)">
+                <span>个</span>
+            </div>
+            <div class="gift-item-actions">
+                <button class="btn btn-outline-danger btn-sm" onclick="removeGiftItem('${type}', ${index})" title="删除">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openGiftItemSelector(type) {
+    currentGiftType = type;
+    const modal = new bootstrap.Modal(document.getElementById('giftItemModal'));
+    modal.show();
+    if (itemsLoaded && ITEMS && Object.keys(ITEMS).length > 0) {
+        renderGiftItems('logistics');
+    }
+}
+
+function renderGiftItems(cat, clickedBtn) {
+    const g = document.getElementById('gift-item-grid');
+    g.innerHTML = '';
+    const items = ITEMS[cat] || {};
+    for (const [code, name] of Object.entries(items)) {
+        const b = document.createElement('button');
+        b.className = 'btn btn-outline-primary item-btn h-100';
+        b.innerHTML = `<div class="fw-bold small">${escapeHtml(name)}</div><div class="text-muted small font-monospace">${escapeHtml(code)}</div>`;
+        b.onclick = () => {
+            addGiftItem(code, name);
+        };
+        g.appendChild(b);
+    }
+    if (Object.keys(items).length === 0) g.innerHTML = '<div class="text-center text-muted p-4">暂无物品</div>';
+    document.querySelectorAll('#giftItemTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+    if (clickedBtn) {
+        clickedBtn.classList.add('active');
+    } else {
+        const firstTab = document.querySelector('#giftItemTabs .nav-link');
+        if (firstTab) firstTab.classList.add('active');
+    }
+}
+
+function filterGiftItems() {
+    const t = document.getElementById('gift-item-search').value.toLowerCase().trim();
+    const g = document.getElementById('gift-item-grid');
+    g.innerHTML = '';
+    let found = 0;
+    for (const cat in ITEMS) {
+        for (const [code, name] of Object.entries(ITEMS[cat])) {
+            if (code.includes(t) || name.toLowerCase().includes(t)) {
+                const b = document.createElement('button');
+                b.className = 'btn btn-primary item-btn h-100';
+                b.innerHTML = `<div class="fw-bold small">${escapeHtml(name)}</div><div class="text-white small font-monospace">${escapeHtml(code)}</div>`;
+                b.onclick = () => {
+                    addGiftItem(code, name);
+                };
+                g.appendChild(b);
+                found++;
+            }
+        }
+    }
+    if (found === 0) g.innerHTML = '<div class="col-12 text-center text-muted py-4"><i class="bi bi-search fs-1 mb-2"></i><p class="mb-0">未找到匹配物品</p></div>';
+}
+
+function addGiftItem(code, name) {
+    if (!currentGiftType) return;
+    
+    const existingIndex = giftItemsData[currentGiftType].findIndex(item => item.code === code);
+    if (existingIndex >= 0) {
+        giftItemsData[currentGiftType][existingIndex].count += 1;
+        showToast(`${name} 数量已增加`, 'info');
+    } else {
+        giftItemsData[currentGiftType].push({ code, name, count: 1 });
+        showToast(`已添加: ${name}`, 'success');
+    }
+    
+    renderGiftItemsList(currentGiftType);
+    updatePlayerEvents();
+}
+
+function updateGiftItemCount(type, index, value) {
+    const count = parseInt(value) || 1;
+    if (count < 1) {
+        giftItemsData[type][index].count = 1;
+    } else if (count > 999999) {
+        giftItemsData[type][index].count = 999999;
+    } else {
+        giftItemsData[type][index].count = count;
+    }
+    updatePlayerEvents();
+}
+
+function removeGiftItem(type, index) {
+    const item = giftItemsData[type][index];
+    giftItemsData[type].splice(index, 1);
+    renderGiftItemsList(type);
+    updatePlayerEvents();
+    showToast(`已移除: ${item.name}`, 'info');
+}
+
+// ==================== 自动响应系统控制（守护进程模式）====================
+let autoResponderStatus = false;
+let autoResponderMode = null;
+let autoResponderPid = null;
+
+// 检查自动响应系统状态
+async function checkAutoResponderStatus() {
+    try {
+        const response = await fetch('../../api.php?action=auto_responder_status');
+        const data = await response.json();
+        autoResponderStatus = data.running;
+        autoResponderMode = data.mode;
+        autoResponderPid = data.pid;
+        updateAutoResponderUI();
+    } catch (error) {
+        console.error('检查自动响应状态失败:', error);
+    }
+}
+
+// 更新自动响应系统 UI
+function updateAutoResponderUI() {
+    const badge = document.getElementById('auto-responder-status-badge');
+    const btn = document.getElementById('btn-toggle-auto-responder');
+    
+    if (!badge || !btn) return;
+    
+    if (autoResponderStatus) {
+        badge.className = 'badge bg-success ms-2';
+        badge.textContent = '实时监控中';
+        btn.className = 'btn btn-sm btn-danger';
+        btn.innerHTML = '<i class="bi bi-power me-1"></i>停止';
+    } else {
+        badge.className = 'badge bg-secondary ms-2';
+        badge.textContent = '已停止';
+        btn.className = 'btn btn-sm btn-success';
+        btn.innerHTML = '<i class="bi bi-power me-1"></i>启动';
+    }
+}
+
+// 切换自动响应系统状态
+async function toggleAutoResponder() {
+    const action = autoResponderStatus ? 'auto_responder_stop' : 'auto_responder_start';
+    
+    try {
+        const response = await fetch(`../../api.php?action=${action}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            await checkAutoResponderStatus();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        showToast('操作失败: ' + error.message, 'error');
+    }
+}
+
+// 立即执行一次自动响应（启动前台模式用于测试）
+async function runAutoResponderOnce() {
+    try {
+        const btn = document.querySelector('button[onclick="runAutoResponderOnce()"]');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i>运行中...';
+        }
+        
+        const response = await fetch('../../api.php?action=auto_responder_run_once');
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        showToast('执行失败: ' + error.message, 'error');
+    } finally {
+        const btn = document.querySelector('button[onclick="runAutoResponderOnce()"]');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill"></i>运行一次';
+        }
+    }
+}
+
+// ==================== 玩家搜索下拉功能 ====================
+function refreshPlayerDropdown() {
+    const dropdown = document.getElementById('player-dropdown');
+    const itemsContainer = document.getElementById('player-dropdown-items');
+    const input = document.getElementById('target-player');
+    
+    if (!dropdown || !itemsContainer || !input) return;
+    
+    const query = input.value.trim().toLowerCase();
+    const players = query ? searchPlayers(query) : getAllKnownPlayers();
+    
+    if (players.length === 0) {
+        itemsContainer.innerHTML = '<div class="dropdown-item text-muted">无匹配玩家</div>';
+        return;
+    }
+    
+    const displayPlayers = players.slice(0, 20);
+    const fragment = document.createDocumentFragment();
+    
+    displayPlayers.forEach(p => {
+        const statusIcon = p.status === 'online' ? '🟢' : '⚪';
+        const ipText = p.ip ? `<small class="text-muted ms-2">${escapeHtml(p.ip)}</small>` : '';
+        const timeText = p.lastSeen ? `<small class="text-muted">${formatTimeAgo(p.lastSeen)}</small>` : '';
+        const safeName = escapeAttr(p.name);
+        
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'dropdown-item d-flex justify-content-between align-items-center';
+        item.innerHTML = `
+            <div>
+                <span class="me-2">${statusIcon}</span>
+                <span class="fw-bold">${escapeHtml(p.name)}</span>
+                ${ipText}
+            </div>
+            <div>${timeText}</div>
+        `;
+        item.onclick = function() {
+            selectPlayer(safeName);
+            return false;
+        };
+        fragment.appendChild(item);
+    });
+    
+    itemsContainer.innerHTML = '';
+    itemsContainer.appendChild(fragment);
+}
+
+// 选择玩家
+function selectPlayer(playerName) {
+    const input = document.getElementById('target-player');
+    if (input) {
+        input.value = playerName;
+        hidePlayerDropdown();
+        
+        // 显示玩家详细信息
+        showPlayerDetails(playerName);
+    }
+}
+
+// 显示玩家详情
+function showPlayerDetails(playerName) {
+    const info = getPlayerInfo(playerName);
+    if (info) {
+        const statusText = info.status === 'online' ? '在线' : '离线';
+        const ipText = info.ip ? `IP: ${info.ip}` : '';
+        showToast(`玩家: ${playerName} | 状态: ${statusText} ${ipText}`, 'info');
+    }
+}
+
+// 隐藏下拉列表
+function hidePlayerDropdown() {
+    const dropdown = document.getElementById('player-dropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+}
+
+// 显示下拉列表
+function showPlayerDropdown() {
+    const dropdown = document.getElementById('player-dropdown');
+    if (dropdown) {
+        refreshPlayerDropdown();
+        dropdown.style.display = 'block';
+    }
+}
+
+// 格式化时间（多久以前）
+function formatTimeAgo(timestamp) {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    
+    if (seconds < 60) return '刚刚';
+    if (seconds < 3600) return Math.floor(seconds / 60) + '分钟前';
+    if (seconds < 86400) return Math.floor(seconds / 3600) + '小时前';
+    return Math.floor(seconds / 86400) + '天前';
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "name": "游戏在列表中显示的名称",
+  "description": "游戏在列表中显示的描述",
+  "tags": ["游戏", "标签"],
+
+  "_comment_max_players": "允许的最大玩家数量，管理员即使服务器已满也能加入。0表示无限制。",
+  "max_players": 0,
+
+  "_comment_visibility": [
+    "public: 游戏将发布在官方Factorio匹配服务器上",
+    "lan: 游戏将在局域网上广播"
+  ],
+  "visibility": {
+    "public": true,
+    "lan": true
+  },
+
+  "_comment_credentials": "你的factorio.com登录凭据。对于visibility为public的游戏是必需的",
+  "username": "",
+  "password": "",
+
+  "_comment_token": "身份验证令牌。可以替代上面的'password'使用。",
+  "token": "",
+
+  "game_password": "",
+
+  "_comment_require_user_verification": "设置为true时，服务器将只允许拥有有效Factorio.com账户的客户端连接",
+  "require_user_verification": true,
+
+  "_comment_max_upload_in_kilobytes_per_second": "可选，默认值为0。0表示无限制。",
+  "max_upload_in_kilobytes_per_second": 0,
+
+  "_comment_max_upload_slots": "可选，默认值为5。0表示无限制。",
+  "max_upload_slots": 5,
+
+  "_comment_minimum_latency_in_ticks": "可选，默认速度下一tick为16ms，默认值为0。0表示无最小值限制。",
+  "minimum_latency_in_ticks": 0,
+
+  "_comment_max_heartbeats_per_second": "网络tick速率。游戏更新数据包在捆绑发送前的最大发送速率。最小值为6，最大值为240。",
+  "max_heartbeats_per_second": 60,
+
+  "_comment_ignore_player_limit_for_returning_players": "已经在该地图上玩过的玩家即使达到最大玩家限制也能加入。",
+  "ignore_player_limit_for_returning_players": false,
+
+  "_comment_allow_commands": "可能的值为true、false和admins-only",
+  "allow_commands": "admins-only",
+
+  "_comment_autosave_interval": "自动保存间隔（分钟）",
+  "autosave_interval": 10,
+
+  "_comment_autosave_slots": "服务器自动保存槽位数量，服务器自动保存时会循环使用这些槽位。",
+  "autosave_slots": 5,
+
+  "_comment_afk_autokick_interval": "玩家无操作多长时间后被踢出（分钟），0表示永不踢出。",
+  "afk_autokick_interval": 0,
+
+  "_comment_auto_pause": "当没有玩家在线时服务器是否应该暂停。",
+  "auto_pause": true,
+
+  "_comment_auto_pause_when_players_connect": "当有人连接到服务器时，服务器是否应该暂停。",
+  "auto_pause_when_players_connect": false,
+
+  "only_admins_can_pause_the_game": true,
+
+  "_comment_autosave_only_on_server": "自动保存是否只保存在服务器上，还是同时保存在所有已连接的客户端上。默认为true。",
+  "autosave_only_on_server": true,
+
+  "_comment_non_blocking_saving": "高度实验性功能，启用风险自负，可能导致存档丢失。在UNIX系统上，服务器将分叉进程来创建自动保存。无论autosave_only_on_server选项如何设置，已连接的Windows客户端上的自动保存都将被禁用。",
+  "non_blocking_saving": false,
+
+  "_comment_segment_sizes": "长网络消息会被分割成多个段，在多个tick中发送。段的大小取决于当前连接的对等方数量。增加段大小会增加服务器的上传带宽需求和客户端的下载带宽需求。此设置仅影响服务器出站消息。更改这些设置可能会对某些客户端的连接稳定性产生负面影响。",
+  "minimum_segment_size": 25,
+  "minimum_segment_size_peer_count": 20,
+  "maximum_segment_size": 100,
+  "maximum_segment_size_peer_count": 10
+}

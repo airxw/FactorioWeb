@@ -1,0 +1,24 @@
+# 忽略以下文件夹/内容，不推送到 GitHub
+
+# versions 文件夹本身保留，但忽略文件夹内的所有内容
+versions/*
+!versions/.gitkeep
+
+# 完全忽略以下文件夹
+项目开发/
+.trae/
+
+# 忽略所有日志文件
+*.log
+logs/
+
+# 忽略特定的服务器配置文件
+web/config/serverConfigs/千倍不在话下.json
+web/config/serverConfigs/是谁要我做的多用户管理的.json
+web/config/serverConfigs/万倍不在话下.json
+web/config/serverConfigs/元宵节过啦.json
+web/config/serverConfigs/ieac新年快乐.json
+web/config/serverConfigs/ieac元宵节快乐.json
+
+# 忽略包含敏感信息的配置文件（使用 .example 副本代替）
+web/config/system/auth.php

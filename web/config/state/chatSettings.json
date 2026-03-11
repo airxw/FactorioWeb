@@ -1,0 +1,53 @@
+{
+    "scheduledTasks": [],
+    "triggerResponses": [
+        {
+            "id": 1772864755334,
+            "keyword": "你好",
+            "response": "是的，我很好"
+        }
+    ],
+    "periodicMessages": [],
+    "serverResponses": [
+        {
+            "type": "server-info",
+            "keyword": "服务器信息",
+            "value": ""
+        },
+        {
+            "type": "vote-kick",
+            "keyword": "-踢人",
+            "value": "{\"required\":\"3\",\"timeout\":\"60\",\"cooldown\":\"600\"}"
+        },
+        {
+            "type": "ping-test",
+            "keyword": "延迟",
+            "value": ""
+        },
+        {
+            "type": "request-item",
+            "keyword": "腐竹爸爸给我点",
+            "value": "{\"count\":\"100\",\"cooldown\":\"60\"}"
+        }
+    ],
+    "playerEvents": {
+        "welcome": {
+            "enabled": true,
+            "message": "{player}欢迎参与这个坐牢图，有事请加群1137842268，",
+            "type": "public"
+        },
+        "goodbye": {
+            "enabled": true,
+            "message": "{player}逃跑了~",
+            "type": "public"
+        },
+        "firstJoinGift": {
+            "enabled": true,
+            "items": "battery-mk2-equipment 10\nenergy-shield-mk2-equipment 10\npersonal-roboport-mk2-equipment 10\nfusion-reactor-equipment 6\nnight-vision-equipment 1\nexoskeleton-equipment 10\nassembling-machine-3 10\nelectric-furnace 100\nroboport 10\nlogistic-robot 100\nconstruction-robot 200\nturbo-underground-belt 50\nturbo-transport-belt 50\nturbo-splitter 50\nstack-filter-inserter 50\nstorage-chest 50\nexpress-loader 50"
+        },
+        "rejoinGift": {
+            "enabled": true,
+            "items": "construction-robot 10\nlogistic-robot 5\nstorage-chest 10"
+        }
+    }
+}
