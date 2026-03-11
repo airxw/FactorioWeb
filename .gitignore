@@ -4,13 +4,15 @@
 versions/*
 !versions/.gitkeep
 
+# logs 文件夹本身保留，但忽略文件夹内的所有内容
+logs/*
+!logs/.gitkeep
+
 # 完全忽略以下文件夹
-项目开发/
 .trae/
 
 # 忽略所有日志文件
 *.log
-logs/
 
 # 忽略特定的服务器配置文件
 web/config/serverConfigs/千倍不在话下.json
