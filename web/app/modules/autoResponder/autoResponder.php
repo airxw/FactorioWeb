@@ -20,7 +20,6 @@ abstract class AutoResponder
         $this->settingsFile = dirname($this->webDir) . '/config/state/chatSettings.json';
         $this->stateFile = dirname($this->webDir) . '/config/state/autoResponderState.json';
         $this->logFile = dirname($this->webDir) . '/logs/autoResponder.log';
-        $this->rconConfigFile = dirname($this->webDir) . '/config/system/rcon.php';
 
         $this->loadSettings();
         $this->loadState();
@@ -177,14 +176,30 @@ abstract class AutoResponder
     {
         $config = $this->getServerConfig($serverId);
 
-        $rconTest = RconService::testConnection(
-            $config['rcon_host'] ?? '127.0.0.1',
-            $config['rcon_port'] ?? 27015,
-            $config['rcon_password'] ?? ''
-        );
+        static $poolClient = null;
+        static $poolAvailable = null;
+        
+        if ($poolAvailable === null) {
+            require_once dirname(__DIR__, 2) . '/rconPoolClient.php';
+            $poolClient = new \RconPoolClient();
+            $poolAvailable = $poolClient->ping()['success'] ?? false;
+        }
+        
+        if ($poolAvailable) {
+            $result = $poolClient->execute('/p');
+            if ($result['success']) {
+                return true;
+            }
+        } else {
+            $rconTest = RconService::testConnection(
+                $config['rcon_host'] ?? '127.0.0.1',
+                $config['rcon_port'] ?? 27015,
+                $config['rcon_password'] ?? ''
+            );
 
-        if ($rconTest) {
-            return true;
+            if ($rconTest) {
+                return true;
+            }
         }
 
         $screenName = $config['screen_name'] ?? 'factorio_server';

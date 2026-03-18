@@ -36,7 +36,7 @@ class ServerService
     private $rconConnections = [];
     private $runningCache = [];
 
-    public function __construct(array $rconConfigs = null)
+    public function __construct(?array $rconConfigs = null)
     {
         $this->rconConfigs = $rconConfigs ?? $this->loadRconConfig();
     }
@@ -122,6 +122,23 @@ class ServerService
 
     public function sendRconCommand(string $command, string $serverId = 'default'): ?string
     {
+        static $poolClient = null;
+        static $poolAvailable = null;
+        
+        if ($poolAvailable === null) {
+            require_once dirname(__DIR__) . '/rconPoolClient.php';
+            $poolClient = new \RconPoolClient();
+            $poolAvailable = $poolClient->ping()['success'] ?? false;
+        }
+        
+        if ($poolAvailable) {
+            $result = $poolClient->execute($command);
+            if ($result['success']) {
+                return $result['result'] ?? '';
+            }
+            return null;
+        }
+
         $config = $this->getServerConfig($serverId);
 
         if (!($config['rcon_enabled'] ?? true)) {
@@ -155,17 +172,37 @@ class ServerService
         $config = $this->getServerConfig($serverId);
 
         if ($config['rcon_enabled'] ?? true) {
-            $rconTest = RconService::testConnection(
-                $config['rcon_host'] ?? '127.0.0.1',
-                $config['rcon_port'] ?? 27015,
-                $config['rcon_password'] ?? ''
-            );
-            if ($rconTest) {
-                $this->runningCache[$serverId] = [
-                    'status' => true,
-                    'timestamp' => $currentTime
-                ];
-                return true;
+            static $poolClient = null;
+            static $poolAvailable = null;
+            
+            if ($poolAvailable === null) {
+                require_once dirname(__DIR__) . '/rconPoolClient.php';
+                $poolClient = new \RconPoolClient();
+                $poolAvailable = $poolClient->ping()['success'] ?? false;
+            }
+            
+            if ($poolAvailable) {
+                $result = $poolClient->execute('/p');
+                if ($result['success']) {
+                    $this->runningCache[$serverId] = [
+                        'status' => true,
+                        'timestamp' => $currentTime
+                    ];
+                    return true;
+                }
+            } else {
+                $rconTest = RconService::testConnection(
+                    $config['rcon_host'] ?? '127.0.0.1',
+                    $config['rcon_port'] ?? 27015,
+                    $config['rcon_password'] ?? ''
+                );
+                if ($rconTest) {
+                    $this->runningCache[$serverId] = [
+                        'status' => true,
+                        'timestamp' => $currentTime
+                    ];
+                    return true;
+                }
             }
         }
 
@@ -248,15 +285,25 @@ class ServerService
         $rconPort = $serverConfig['rcon_port'] ?? 27015;
         $rconPassword = $serverConfig['rcon_password'] ?? 'factorio_rcon_password';
         $serverRoot = "$baseDir/server";
+        
+        // 从配置文件读取白名单设置
+        $configFilePath = "$configDir/$cfg";
+        $serverSettings = [];
+        if (file_exists($configFilePath)) {
+            $serverSettings = json_decode(file_get_contents($configFilePath), true) ?: [];
+        }
+        $useWhitelist = $serverSettings['use_server_whitelist'] ?? false;
+        $whitelistArg = $useWhitelist ? '--use-server-whitelist' : '';
 
         $cmd = sprintf(
-            "screen -dmS %s bash -c 'cd %s && %s --start-server %s --server-settings %s --mod-directory %s --use-server-whitelist --rcon-port %d --rcon-password %s >> %s 2>&1'",
+            "screen -dmS %s bash -c 'cd %s && %s --start-server %s --server-settings %s --mod-directory %s %s --rcon-port %d --rcon-password %s >> %s 2>&1'",
             escapeshellarg($screenName),
             escapeshellarg($serverRoot),
             escapeshellarg($bin),
             escapeshellarg($currentSave),
-            escapeshellarg("$configDir/$cfg"),
+            escapeshellarg($configFilePath),
             escapeshellarg($modDir),
+            $whitelistArg,
             $rconPort,
             escapeshellarg($rconPassword),
             escapeshellarg($logFile)

@@ -89,7 +89,12 @@ function requireLogin() {
         $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
                   strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
         
-        if ($isAjax) {
+        $isApiRequest = isset($_SERVER['HTTP_ACCEPT']) && 
+                        strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false;
+        
+        $hasAction = isset($_REQUEST['action']);
+        
+        if ($isAjax || $isApiRequest || $hasAction) {
             header('Content-Type: application/json');
             echo json_encode(['error' => '请先登录', 'redirect' => 'login.html']);
         } else {

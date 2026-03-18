@@ -1197,6 +1197,16 @@ body, html {
     gap: 4px;
 }
 
+.gift-item-quality {
+    display: flex;
+    align-items: center;
+}
+
+.gift-item-quality select {
+    font-size: 0.75rem;
+    padding: 2px 4px;
+}
+
 .gift-item-count input {
     width: 80px;
     text-align: center;

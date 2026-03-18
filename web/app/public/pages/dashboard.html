@@ -154,6 +154,23 @@
             left: 1rem;
             right: 1rem;
         }
+        .btn-primary[onclick="showCreateServerModal()"],
+        .add-server-card,
+        .btn-outline-primary[onclick*="openServer"],
+        .btn-outline-success[onclick*="quickStart"],
+        .server-card .btn-outline-primary,
+        .server-card .btn-outline-success,
+        .server-card .btn-outline-danger,
+        #server-table-body .btn-outline-primary,
+        #server-table-body .btn-outline-success,
+        #server-table-body .btn-outline-secondary,
+        #server-table-body .btn-outline-danger {
+            display: none !important;
+        }
+        .server-card .btn-group,
+        #server-table-body .btn-group {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -202,7 +219,7 @@
                 <p class="text-muted mb-0 small">管理您的 Factorio 服务器</p>
             </div>
             <div>
-                <button class="btn btn-primary" onclick="showCreateServerModal()">
+                <button class="btn btn-primary d-none" onclick="showCreateServerModal()">
                     <i class="bi bi-plus-lg me-1"></i>创建服务器
                 </button>
             </div>
@@ -782,7 +799,7 @@ function renderServerList() {
                             ${server.running ? '运行中' : '已停止'}
                         </span>
                         <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-primary" onclick="event.stopPropagation(); openServer('${server.id}')" title="管理">
+                            <button class="btn btn-outline-primary d-none" onclick="event.stopPropagation(); openServer('${server.id}')" title="管理">
                                 <i class="bi bi-gear"></i>
                             </button>
                             ${server.running ? `
@@ -790,7 +807,7 @@ function renderServerList() {
                                     <i class="bi bi-stop-fill"></i>
                                 </button>
                             ` : `
-                                <button class="btn btn-outline-success" onclick="event.stopPropagation(); quickStart('${server.id}')" title="启动">
+                                <button class="btn btn-outline-success d-none" onclick="event.stopPropagation(); quickStart('${server.id}')" title="启动">
                                     <i class="bi bi-play-fill"></i>
                                 </button>
                             `}
@@ -800,7 +817,7 @@ function renderServerList() {
             </div>
         </div>
     `).join('') + `
-        <div class="col-md-6 col-lg-4 mb-3">
+        <div class="col-md-6 col-lg-4 mb-3 d-none">
             <div class="add-server-card" onclick="showCreateServerModal()">
                 <div class="text-center text-muted">
                     <i class="bi bi-plus-circle fs-1 d-block mb-2"></i>

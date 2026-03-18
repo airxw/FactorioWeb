@@ -27,6 +27,7 @@ define('DAEMON_LOG_FILE', WEB_DIR . '/logs/autoResponderDaemon.log');
 define('RUNTIME_CONFIG_FILE', BASE_DIR . '/logs/runtimeConfig.json');
 define('VOTE_STATE_FILE', WEB_DIR . '/config/state/voteState.json');
 define('VOTE_COOLDOWN_FILE', WEB_DIR . '/config/state/voteCooldown.json');
+define('PLAYER_HISTORY_DIR', WEB_DIR . '/config/state/playerHistory');
 define('PLAYER_HISTORY_FILE', WEB_DIR . '/config/state/playerHistory.json');
 define('ITEM_REQUEST_CONFIRM_FILE', WEB_DIR . '/config/state/itemRequestConfirm.json');
 define('RCON_CONFIG_FILE', WEB_DIR . '/config/system/rcon.php');
@@ -43,13 +44,13 @@ define('LOG_LEVEL_WARNING', 2);
 define('LOG_LEVEL_ERROR', 3);
 define('CURRENT_LOG_LEVEL', LOG_LEVEL_INFO);
 
-require_once WEB_DIR . '/factorioRcon.php';
-require_once WEB_DIR . '/services/StateService.php';
-require_once WEB_DIR . '/services/VoteService.php';
-require_once WEB_DIR . '/services/ItemService.php';
-require_once WEB_DIR . '/services/PlayerService.php';
-require_once WEB_DIR . '/services/RconService.php';
-require_once WEB_DIR . '/core/LogConfig.php';
+require_once __DIR__ . '/factorioRcon.php';
+require_once __DIR__ . '/services/StateService.php';
+require_once __DIR__ . '/services/VoteService.php';
+require_once __DIR__ . '/services/ItemService.php';
+require_once __DIR__ . '/services/PlayerService.php';
+require_once __DIR__ . '/services/RconService.php';
+require_once __DIR__ . '/core/LogConfig.php';
 
 use App\Core\LogConfig;
 use App\Services\StateService;
@@ -293,18 +294,36 @@ function executeCommand($command)
     global $rconConfig, $rconConnection;
     
     if ($rconConfig['rcon_enabled']) {
-        $rcon = getRconConnection();
-        if ($rcon !== null) {
-            try {
-                $result = $rcon->sendCommand($command);
-                logDebug('RCON 执行命令: ' . $command);
-                return $result;
-            } catch (Exception $e) {
-                logError('RCON 执行失败: ' . $e->getMessage());
-                if ($rconConnection !== null) {
-                    $rconConnection->disconnect();
+        static $poolClient = null;
+        static $poolAvailable = null;
+        
+        if ($poolAvailable === null) {
+            require_once __DIR__ . '/rconPoolClient.php';
+            $poolClient = new RconPoolClient();
+            $poolAvailable = $poolClient->ping()['success'] ?? false;
+        }
+        
+        if ($poolAvailable) {
+            $result = $poolClient->execute($command);
+            if ($result['success']) {
+                logDebug('RCON 连接池执行命令: ' . $command);
+                return $result['result'] ?? '';
+            }
+            logWarning('RCON 连接池执行失败: ' . ($result['error'] ?? '未知错误'));
+        } else {
+            $rcon = getRconConnection();
+            if ($rcon !== null) {
+                try {
+                    $result = $rcon->sendCommand($command);
+                    logDebug('RCON 执行命令: ' . $command);
+                    return $result;
+                } catch (Exception $e) {
+                    logError('RCON 执行失败: ' . $e->getMessage());
+                    if ($rconConnection !== null) {
+                        $rconConnection->disconnect();
+                    }
+                    $rconConnection = null;
                 }
-                $rconConnection = null;
             }
         }
     }
@@ -492,11 +511,10 @@ function checkRequestItemCooldown($player) {
     ];
 }
 
-function giveItemToPlayer($player, $itemName, $count) {
+function giveItemToPlayer($player, $itemName, $count, $quality = 1) {
     $suggestions = [];
     $resolvedName = resolveItemName($itemName, $suggestions);
     
-    // 检查是否是有效的物品代码
     $itemsFile = WEB_DIR . '/config/game/items.json';
     $validItem = false;
     
@@ -524,22 +542,71 @@ function giveItemToPlayer($player, $itemName, $count) {
         return ['success' => false, 'error' => $errorMsg, 'suggestions' => $suggestions];
     }
     
-    $command = sprintf('/c game.get_player("%s").insert{name="%s",count=%d}', $player, $resolvedName, $count);
+    $qualityName = getQualityName($quality);
+    
+    if ($quality > 1) {
+        $command = sprintf('/c game.get_player("%s").insert{name="%s",count=%d,quality="%s"}', $player, $resolvedName, $count, $qualityName);
+    } else {
+        $command = sprintf('/c game.get_player("%s").insert{name="%s",count=%d}', $player, $resolvedName, $count);
+    }
     $result = executeCommand($command);
-    logInfo("给予物品: 玩家={$player}, 物品={$resolvedName}, 数量={$count}");
-    return ['success' => true, 'item' => $resolvedName];
+    logInfo("给予物品: 玩家={$player}, 物品={$resolvedName}, 数量={$count}, 品质={$qualityName}");
+    return ['success' => true, 'item' => $resolvedName, 'quality' => $qualityName];
+}
+
+function getQualityName($level) {
+    $qualities = [
+        1 => 'normal',
+        2 => 'uncommon', 
+        3 => 'rare',
+        4 => 'epic',
+        5 => 'legendary'
+    ];
+    return $qualities[$level] ?? 'normal';
+}
+
+function getQualityLevel($name) {
+    $levels = [
+        'normal' => 1,
+        'uncommon' => 2,
+        'rare' => 3,
+        'epic' => 4,
+        'legendary' => 5
+    ];
+    return $levels[$name] ?? 1;
+}
+
+function getPlayerHistoryFile() {
+    if (file_exists(RUNTIME_CONFIG_FILE)) {
+        $runtimeConfig = json_decode(file_get_contents(RUNTIME_CONFIG_FILE), true);
+        if ($runtimeConfig && !empty($runtimeConfig['config_file'])) {
+            $configName = preg_replace('/\.json$/i', '', $runtimeConfig['config_file']);
+            $historyDir = PLAYER_HISTORY_DIR;
+            if (!is_dir($historyDir)) {
+                mkdir($historyDir, 0755, true);
+            }
+            return $historyDir . '/' . $configName . '.json';
+        }
+    }
+    return PLAYER_HISTORY_FILE;
 }
 
 function loadPlayerHistory() {
-    if (!file_exists(PLAYER_HISTORY_FILE)) {
+    $historyFile = getPlayerHistoryFile();
+    if (!file_exists($historyFile)) {
         return [];
     }
-    $content = file_get_contents(PLAYER_HISTORY_FILE);
+    $content = file_get_contents($historyFile);
     return json_decode($content, true) ?? [];
 }
 
 function savePlayerHistory($history) {
-    file_put_contents(PLAYER_HISTORY_FILE, json_encode($history, JSON_PRETTY_PRINT));
+    $historyFile = getPlayerHistoryFile();
+    $historyDir = dirname($historyFile);
+    if (!is_dir($historyDir)) {
+        mkdir($historyDir, 0755, true);
+    }
+    file_put_contents($historyFile, json_encode($history, JSON_PRETTY_PRINT));
 }
 
 function isPlayerFirstJoin($player) {
@@ -570,12 +637,27 @@ function parseGiftItems($itemsText) {
         if (empty($line) || strpos($line, '#') === 0) {
             continue;
         }
-        $parts = preg_split('/\s+/', $line, 2);
+        $parts = preg_split('/\s+/', $line, 3);
         if (count($parts) >= 1) {
             $itemName = $parts[0];
-            $count = isset($parts[1]) ? intval($parts[1]) : 1;
-            if ($count < 1) $count = 1;
-            $items[] = ['name' => $itemName, 'count' => $count];
+            $count = 1;
+            $quality = 1;
+            
+            for ($i = 1; $i < count($parts); $i++) {
+                $part = $parts[$i];
+                if (is_numeric($part)) {
+                    $count = intval($part);
+                    if ($count < 1) $count = 1;
+                } elseif (preg_match('/^q(\d)$/i', $part, $m)) {
+                    $quality = intval($m[1]);
+                    if ($quality < 1) $quality = 1;
+                    if ($quality > 5) $quality = 5;
+                } elseif (in_array(strtolower($part), ['normal', 'uncommon', 'rare', 'epic', 'legendary'])) {
+                    $quality = getQualityLevel(strtolower($part));
+                }
+            }
+            
+            $items[] = ['name' => $itemName, 'count' => $count, 'quality' => $quality];
         }
     }
     return $items;
@@ -591,7 +673,7 @@ function giveGiftToPlayer($player, $itemsText) {
     $failedItems = [];
     
     foreach ($items as $item) {
-        $result = giveItemToPlayer($player, $item['name'], $item['count']);
+        $result = giveItemToPlayer($player, $item['name'], $item['count'], $item['quality'] ?? 1);
         if ($result['success']) {
             $successCount++;
         } else {

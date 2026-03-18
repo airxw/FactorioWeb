@@ -8,6 +8,7 @@
     "max_players": 0,
     "ignore_player_limit_for_returning_players": false,
     "require_user_verification": true,
+    "use_server_whitelist": false,
     "visibility": {
         "public": false,
         "lan": true

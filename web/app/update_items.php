@@ -84,7 +84,7 @@ $logisticsItems = [
     'transport-belt', 'fast-transport-belt', 'express-transport-belt', 'turbo-transport-belt',
     'underground-belt', 'fast-underground-belt', 'express-underground-belt', 'turbo-underground-belt',
     'splitter', 'fast-splitter', 'express-splitter', 'turbo-splitter',
-    'inserter', 'long-handed-inserter', 'fast-inserter', 'filter-inserter', 'stack-inserter', 'stack-filter-inserter', 'burner-inserter', 'bulk-inserter',
+    'inserter', 'long-handed-inserter', 'fast-inserter', 'filter-inserter', 'stack-inserter', 'burner-inserter', 'bulk-inserter',
     'pipe', 'pipe-to-ground', 'pump', 'pumpjack', 'storage-tank',
     'wooden-chest', 'iron-chest', 'steel-chest',
     'passive-provider-chest', 'active-provider-chest', 'requester-chest', 'buffer-chest', 'storage-chest',

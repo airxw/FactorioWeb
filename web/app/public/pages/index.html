@@ -64,6 +64,7 @@
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-players">玩家</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-responder">交互</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-files">文件</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-logs">日志</button></li>
             </ul>
 
             <div class="tab-content">
@@ -218,6 +219,39 @@
                     </div>
                     <div class="mb-3"><div class="fw-bold small text-muted mb-2 px-1">地图存档 (Saves)</div><div id="file-list-map" class="list-group list-group-flush border rounded bg-white"></div></div>
                     <div><div class="fw-bold small text-muted mb-2 px-1">配置文件 (Configs)</div><div id="file-list-config" class="list-group list-group-flush border rounded bg-white"></div></div>
+                </div>
+                
+                <!-- 日志管理 -->
+                <div class="tab-pane fade" id="tab-logs">
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-journal-text me-2"></i>历史日志管理</span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshLogList()">
+                                <i class="bi bi-arrow-repeat me-1"></i>刷新
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>日志文件</th>
+                                            <th>大小</th>
+                                            <th>修改时间</th>
+                                            <th class="text-end">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="log-file-list">
+                                        <tr><td colspan="4" class="text-center py-4 text-muted">加载中...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info small mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>说明：</strong>每个配置文件对应独立的日志文件。备份日志格式为 <code>factorio-{配置名}-{时间戳}.log</code>，超过7天的备份会自动清理。
+                    </div>
                 </div>
                 
                 <!-- 自动响应模块 -->
@@ -877,6 +911,7 @@
         document.querySelector('button[data-bs-target="#tab-mods"]').addEventListener('shown.bs.tab', loadMods);
         document.querySelector('button[data-bs-target="#tab-players"]').addEventListener('shown.bs.tab', loadPlayerLists);
         document.querySelector('button[data-bs-target="#tab-responder"]').addEventListener('shown.bs.tab', loadServerResponses);
+        document.querySelector('button[data-bs-target="#tab-logs"]').addEventListener('shown.bs.tab', loadLogFiles);
         // 物品库 Modal 事件 - 使用 Bootstrap 5 正确的事件名
         const itemModalEl = document.getElementById('itemModal');
         if (itemModalEl) {
@@ -1593,6 +1628,10 @@
         const stopArea = document.getElementById('stop-area');
         const startForm = document.getElementById('startForm');
         
+        if (isServerStateLocked()) {
+            return;
+        }
+        
         if (b) {
             if (run) {
                 b.className = 'badge bg-success';
@@ -1882,6 +1921,9 @@ async function useThisSave(name, sizeMB, version) {
         if (select && link) {
             const selectedFile = select.value;
             link.href = '../../configEditor.php?file=' + encodeURIComponent(selectedFile.replace(/\.json$/i, ''));
+            
+            // 切换配置时加载对应的日志文件
+            loadLogHistory(selectedFile);
         }
     }
 
@@ -1904,6 +1946,75 @@ async function useThisSave(name, sizeMB, version) {
     async function loadAllFiles() {
         loadFiles('map', 'file-list-map');
         loadFiles('config', 'file-list-config');
+    }
+
+    async function refreshLogList() {
+        loadLogFiles();
+    }
+
+    async function loadLogFiles() {
+        const tbody = document.getElementById('log-file-list');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">加载中...</td></tr>';
+        
+        try {
+            const r = await fetch('../../api.php?action=log_files');
+            const d = await r.json();
+            
+            if (!d.success || !d.files || d.files.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">暂无日志文件</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = d.files.map(f => `
+                <tr>
+                    <td>
+                        <i class="bi bi-file-earmark-text text-secondary me-2"></i>
+                        ${f.filename}
+                        ${f.is_current ? '<span class="badge bg-primary ms-2">当前</span>' : ''}
+                        ${f.is_backup ? '<span class="badge bg-secondary ms-2">备份</span>' : ''}
+                    </td>
+                    <td>${f.size}</td>
+                    <td>${f.modified}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-success me-1" onclick="downloadLogFile('${f.filename}')" title="下载">
+                            <i class="bi bi-download"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteLogFile('${f.filename}')" title="删除">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">加载失败</td></tr>';
+            showToast('加载日志列表失败', 'error');
+        }
+    }
+
+    function downloadLogFile(filename) {
+        window.location.href = `../../api.php?action=download_log&filename=${encodeURIComponent(filename)}`;
+    }
+
+    async function deleteLogFile(filename) {
+        if (!confirm(`确定要删除日志文件 "${filename}" 吗？此操作不可恢复！`)) return;
+        
+        try {
+            const fd = new FormData();
+            fd.append('action', 'delete_log');
+            fd.append('filename', filename);
+            
+            const r = await fetch('../../api.php', { method: 'POST', body: fd });
+            const d = await r.json();
+            
+            if (d.success) {
+                showToast(d.message || '删除成功', 'success');
+                loadLogFiles();
+            } else {
+                showToast(d.error || '删除失败', 'error');
+            }
+        } catch (e) {
+            showToast('删除失败', 'error');
+        }
     }
 
     async function loadFiles(type, id) {
@@ -2011,17 +2122,130 @@ async function useThisSave(name, sizeMB, version) {
     }
 
     // === 服务器控制 ===
+    let serverStateLock = {
+        locked: false,
+        targetState: null,
+        lockTime: 0,
+        lockDuration: 8000
+    };
+
+    function lockServerState(targetState) {
+        serverStateLock.locked = true;
+        serverStateLock.targetState = targetState;
+        serverStateLock.lockTime = Date.now();
+    }
+
+    function unlockServerState() {
+        serverStateLock.locked = false;
+        serverStateLock.targetState = null;
+    }
+
+    function isServerStateLocked() {
+        if (!serverStateLock.locked) return false;
+        if (Date.now() - serverStateLock.lockTime > serverStateLock.lockDuration) {
+            unlockServerState();
+            return false;
+        }
+        return true;
+    }
+
 window.controlServer = async (act) => {
+    const stopArea = document.getElementById('stop-area');
+    const startForm = document.getElementById('startForm');
+    const statusBadge = document.getElementById('server-status-badge');
+    
     try {
-        const fd = new FormData(document.getElementById('startForm'));
-        fd.append('action', act);
-        const res = await apiCall(act, fd);
-        // 无论 error 或 message，都显示（已优化后端返回 message）
-        if (res.message) showToast(res.message, 'info');  // info 而非 error，避免抛异常
-        probe(); // 刷新状态
+        if (act === 'start') {
+            lockServerState('running');
+            
+            if (statusBadge) {
+                statusBadge.className = 'badge bg-warning text-dark';
+                statusBadge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>启动中...';
+            }
+            if (stopArea) stopArea.classList.add('d-none');
+            if (startForm) startForm.classList.add('d-none');
+            
+            const startingDiv = document.createElement('div');
+            startingDiv.id = 'starting-indicator';
+            startingDiv.className = 'card border-warning bg-warning bg-opacity-10 mb-4';
+            startingDiv.innerHTML = `
+                <div class="card-body text-center py-4">
+                    <div class="spinner-border text-warning mb-3" role="status">
+                        <span class="visually-hidden">启动中...</span>
+                    </div>
+                    <h5 class="fw-bold text-warning mb-2">服务器正在启动</h5>
+                    <p class="text-muted small mb-0">请稍候，启动过程可能需要几秒钟...</p>
+                </div>
+            `;
+            const controlTab = document.getElementById('tab-control');
+            if (controlTab) controlTab.insertBefore(startingDiv, controlTab.firstChild);
+            
+            const fd = new FormData(document.getElementById('startForm'));
+            fd.append('action', act);
+            
+            const res = await fetch('../../api.php', { method: 'POST', body: fd });
+            const d = await res.json();
+            if (d.error) { showToast(d.error, 'error'); throw d.error; }
+            if (d.message) showToast(d.message, 'success');
+            
+            setTimeout(() => {
+                const indicator = document.getElementById('starting-indicator');
+                if (indicator) indicator.remove();
+                unlockServerState();
+                probe();
+            }, 3000);
+            
+        } else if (act === 'stop') {
+            lockServerState('stopped');
+            
+            if (statusBadge) {
+                statusBadge.className = 'badge bg-warning text-dark';
+                statusBadge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>停止中...';
+            }
+            if (stopArea) stopArea.classList.add('d-none');
+            if (startForm) startForm.classList.add('d-none');
+            
+            const stoppingDiv = document.createElement('div');
+            stoppingDiv.id = 'stopping-indicator';
+            stoppingDiv.className = 'card border-warning bg-warning bg-opacity-10 mb-4';
+            stoppingDiv.innerHTML = `
+                <div class="card-body text-center py-4">
+                    <div class="spinner-border text-warning mb-3" role="status">
+                        <span class="visually-hidden">停止中...</span>
+                    </div>
+                    <h5 class="fw-bold text-warning mb-2">服务器正在停止</h5>
+                    <p class="text-muted small mb-0">正在安全关闭服务器，请稍候...</p>
+                </div>
+            `;
+            const controlTab = document.getElementById('tab-control');
+            if (controlTab) controlTab.insertBefore(stoppingDiv, controlTab.firstChild);
+            
+            const fd = new FormData();
+            fd.append('action', act);
+            
+            const res = await fetch('../../api.php', { method: 'POST', body: fd });
+            const d = await res.json();
+            if (d.error) { showToast(d.error, 'error'); throw d.error; }
+            if (d.message) showToast(d.message, 'success');
+            
+            setTimeout(() => {
+                const indicator = document.getElementById('stopping-indicator');
+                if (indicator) indicator.remove();
+                unlockServerState();
+                probe();
+            }, 3000);
+        }
     } catch (e) {
         console.error('Server control failed:', e);
         showToast('操作失败: ' + (e || '未知错误'), 'error');
+        
+        const startingIndicator = document.getElementById('starting-indicator');
+        const stoppingIndicator = document.getElementById('stopping-indicator');
+        if (startingIndicator) startingIndicator.remove();
+        if (stoppingIndicator) stoppingIndicator.remove();
+        
+        unlockServerState();
+        probe();
     }
 };
 
@@ -2186,14 +2410,18 @@ function updateLoadMoreButton() {
 }
 
 // 加载日志历史（从末尾加载最新的日志）
-async function loadLogHistory() {
+async function loadLogHistory(configFile = null) {
     if (isLoadingLogHistory) return;
     isLoadingLogHistory = true;
     updateLoadMoreButton();
     
     try {
         const limit = 100;
-        const r = await fetch(`../../api.php?action=log_history&offset=0&limit=${limit}&from_end=true`);
+        let url = `../../api.php?action=log_history&offset=0&limit=${limit}&from_end=true`;
+        if (configFile) {
+            url += `&config=${encodeURIComponent(configFile)}`;
+        }
+        const r = await fetch(url);
         const data = await r.json();
         
         if (data.success) {
@@ -2207,6 +2435,13 @@ async function loadLogHistory() {
             renderLogEntries();
             updateLogCount();
             updateLoadMoreButton();
+            
+            // 显示当前日志文件信息
+            if (data.log_file) {
+                showToast(`已加载日志: ${data.log_file}`, 'info');
+            }
+        } else if (data.error) {
+            showToast(data.error, 'error');
         }
     } catch (e) {
         console.error('加载日志历史失败:', e);
@@ -2227,7 +2462,13 @@ async function loadMoreLogHistory() {
     
     try {
         const limit = 100;
-        const r = await fetch(`../../api.php?action=log_history&offset=${logHistoryOffset}&limit=${limit}&from_end=true`);
+        const configSelect = document.getElementById('config-select');
+        const configFile = configSelect ? configSelect.value : null;
+        let url = `../../api.php?action=log_history&offset=${logHistoryOffset}&limit=${limit}&from_end=true`;
+        if (configFile) {
+            url += `&config=${encodeURIComponent(configFile)}`;
+        }
+        const r = await fetch(url);
         const data = await r.json();
         
         if (data.success && data.entries && data.entries.length > 0) {
@@ -3318,9 +3559,24 @@ function giftItemsStringToArray(str) {
         const parts = line.trim().split(/\s+/);
         if (parts.length >= 1) {
             const code = parts[0];
-            const count = parts.length >= 2 ? parseInt(parts[1]) || 1 : 1;
+            let count = 1;
+            let quality = 1;
+            
+            for (let i = 1; i < parts.length; i++) {
+                const part = parts[i];
+                if (/^\d+$/.test(part)) {
+                    count = parseInt(part) || 1;
+                } else if (/^q(\d)$/i.test(part)) {
+                    quality = parseInt(part.substring(1)) || 1;
+                    if (quality < 1) quality = 1;
+                    if (quality > 5) quality = 5;
+                } else if (['normal', 'uncommon', 'rare', 'epic', 'legendary'].includes(part.toLowerCase())) {
+                    quality = getQualityLevel(part.toLowerCase());
+                }
+            }
+            
             const name = getItemName(code);
-            items.push({ code, count, name });
+            items.push({ code, count, quality, name });
         }
     }
     return items;
@@ -3328,7 +3584,27 @@ function giftItemsStringToArray(str) {
 
 function giftItemsArrayToString(items) {
     if (!items || items.length === 0) return '';
-    return items.map(item => `${item.code} ${item.count}`).join('\n');
+    return items.map(item => {
+        if (item.quality && item.quality > 1) {
+            return `${item.code} ${item.count} q${item.quality}`;
+        }
+        return `${item.code} ${item.count}`;
+    }).join('\n');
+}
+
+function getQualityLevel(name) {
+    const levels = { 'normal': 1, 'uncommon': 2, 'rare': 3, 'epic': 4, 'legendary': 5 };
+    return levels[name] || 1;
+}
+
+function getQualityName(level) {
+    const names = { 1: '普通', 2: '优质', 3: '稀有', 4: '史诗', 5: '传说' };
+    return names[level] || '普通';
+}
+
+function getQualityColor(level) {
+    const colors = { 1: '#aaaaaa', 2: '#55cc55', 3: '#5555ff', 4: '#aa55aa', 5: '#ffaa00' };
+    return colors[level] || '#aaaaaa';
 }
 
 function getItemName(code) {
@@ -3362,8 +3638,17 @@ function renderGiftItemsList(type) {
                 <i class="bi bi-box-seam"></i>
             </div>
             <div class="gift-item-info">
-                <div class="gift-item-name">${escapeHtml(item.name)}</div>
+                <div class="gift-item-name" style="color: ${getQualityColor(item.quality || 1)}">${escapeHtml(item.name)}${item.quality > 1 ? ' <span class="badge" style="background:' + getQualityColor(item.quality) + '">' + getQualityName(item.quality) + '</span>' : ''}</div>
                 <div class="gift-item-code">${escapeHtml(item.code)}</div>
+            </div>
+            <div class="gift-item-quality">
+                <select class="form-select form-select-sm" style="width: 70px;" onchange="updateGiftItemQuality('${type}', ${index}, this.value)">
+                    <option value="1" ${item.quality == 1 ? 'selected' : ''}>普通</option>
+                    <option value="2" ${item.quality == 2 ? 'selected' : ''}>优质</option>
+                    <option value="3" ${item.quality == 3 ? 'selected' : ''}>稀有</option>
+                    <option value="4" ${item.quality == 4 ? 'selected' : ''}>史诗</option>
+                    <option value="5" ${item.quality == 5 ? 'selected' : ''}>传说</option>
+                </select>
             </div>
             <div class="gift-item-count">
                 <input type="number" class="form-control form-control-sm" 
@@ -3442,7 +3727,7 @@ function addGiftItem(code, name) {
         giftItemsData[currentGiftType][existingIndex].count += 1;
         showToast(`${name} 数量已增加`, 'info');
     } else {
-        giftItemsData[currentGiftType].push({ code, name, count: 1 });
+        giftItemsData[currentGiftType].push({ code, name, count: 1, quality: 1 });
         showToast(`已添加: ${name}`, 'success');
     }
     
@@ -3459,6 +3744,15 @@ function updateGiftItemCount(type, index, value) {
     } else {
         giftItemsData[type][index].count = count;
     }
+    updatePlayerEvents();
+}
+
+function updateGiftItemQuality(type, index, value) {
+    const quality = parseInt(value) || 1;
+    if (quality < 1) giftItemsData[type][index].quality = 1;
+    else if (quality > 5) giftItemsData[type][index].quality = 5;
+    else giftItemsData[type][index].quality = quality;
+    renderGiftItemsList(type);
     updatePlayerEvents();
 }
 

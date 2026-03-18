@@ -63,6 +63,25 @@ class ServerController
         $serverId = $params['server'] ?? 'default';
         $config = $this->serverService->getServerConfig($serverId);
 
+        static $poolClient = null;
+        static $poolAvailable = null;
+        
+        if ($poolAvailable === null) {
+            require_once dirname(__DIR__) . '/rconPoolClient.php';
+            $poolClient = new \RconPoolClient();
+            $poolAvailable = $poolClient->ping()['success'] ?? false;
+        }
+        
+        if ($poolAvailable) {
+            $result = $poolClient->execute('/p');
+            Response::success([
+                'connected' => $result['success'],
+                'server_id' => $serverId,
+                'source' => 'pool'
+            ]);
+            return;
+        }
+
         $result = \App\Services\RconService::testConnection(
             $config['rcon_host'] ?? '127.0.0.1',
             $config['rcon_port'] ?? 27015,
@@ -71,7 +90,8 @@ class ServerController
 
         Response::success([
             'connected' => $result,
-            'server_id' => $serverId
+            'server_id' => $serverId,
+            'source' => 'direct'
         ]);
     }
 

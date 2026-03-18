@@ -14,6 +14,17 @@ logs/*
 # 忽略所有日志文件
 *.log
 
+# 忽略状态文件目录
+web/config/state/*
+web/config/state/playerHistory/*
+
+# 忽略根配置目录下的状态文件
+web/config/autoResponderPosition.txt
+web/config/state/autoResponderPosition.txt
+
+# 忽略缓存文件
+web/logs/serverStatusCache.json
+
 # 忽略特定的服务器配置文件
 web/config/serverConfigs/千倍不在话下.json
 web/config/serverConfigs/是谁要我做的多用户管理的.json
@@ -21,6 +32,10 @@ web/config/serverConfigs/万倍不在话下.json
 web/config/serverConfigs/元宵节过啦.json
 web/config/serverConfigs/ieac新年快乐.json
 web/config/serverConfigs/ieac元宵节快乐.json
+web/config/serverConfigs/初始化存档.json
 
 # 忽略包含敏感信息的配置文件（使用 .example 副本代替）
 web/config/system/auth.php
+
+# 忽略锁文件
+*.lock

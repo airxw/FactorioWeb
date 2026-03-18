@@ -6,20 +6,50 @@ class PlayerService
 {
     private StateService $stateService;
     private string $historyFile = 'playerHistory';
+    private string $historyDir;
+    private ?string $configName = null;
 
-    public function __construct(StateService $stateService = null)
+    public function __construct(StateService $stateService = null, string $configName = null)
     {
         $this->stateService = $stateService ?? new StateService();
+        $this->historyDir = dirname(__DIR__, 2) . '/config/state/playerHistory';
+        $this->configName = $configName;
+    }
+
+    public function setConfigName(string $configName): void
+    {
+        $this->configName = $configName;
+    }
+
+    private function getHistoryFile(): string
+    {
+        if ($this->configName !== null) {
+            $configName = preg_replace('/\.json$/i', '', $this->configName);
+            if (!is_dir($this->historyDir)) {
+                mkdir($this->historyDir, 0755, true);
+            }
+            return $this->historyDir . '/' . $configName . '.json';
+        }
+        return dirname(__DIR__, 2) . '/config/state/playerHistory.json';
     }
 
     public function loadPlayerHistory(): array
     {
-        return $this->stateService->loadState($this->historyFile);
+        $file = $this->getHistoryFile();
+        if (!file_exists($file)) {
+            return [];
+        }
+        return json_decode(file_get_contents($file), true) ?? [];
     }
 
     public function savePlayerHistory(array $history): void
     {
-        $this->stateService->saveState($this->historyFile, $history);
+        $file = $this->getHistoryFile();
+        $dir = dirname($file);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        file_put_contents($file, json_encode($history, JSON_PRETTY_PRINT));
     }
 
     public function isPlayerFirstJoin(string $player): bool

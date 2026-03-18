@@ -39,6 +39,9 @@
  * @author Factorio Server Pro Team
  */
 
+// 启用输出缓冲，确保只返回纯净的JSON响应
+ob_start();
+
 header('Content-Type: application/json; charset=utf-8');
 error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 ini_set('display_errors', 0);
@@ -340,6 +343,9 @@ if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
         case 'update_user':         handleUpdateUser(); break;
         case 'log_history':         handleLogHistory(); break;
         case 'log_tail':            handleLogTail(); break;
+        case 'log_files':           handleLogFiles(); break;
+        case 'download_log':        handleDownloadLog(); break;
+        case 'delete_log':          handleDeleteLog(); break;
         case 'start':               handleStart(); break;
         case 'stop':                handleStop(); break;
         case 'console':             handleConsole(); break;
@@ -468,10 +474,12 @@ function handleStart() {
         exit;
     }
     
-    $selectedSave = "{$GLOBALS['saveDir']}/$map";
-    $currentSave = "{$GLOBALS['saveDir']}/current.zip";
+    // 根据请求的版本计算存档目录
+    $saveDir = "$versionDir/saves";
+    $selectedSave = "$saveDir/$map";
+    $currentSave = "$saveDir/current.zip";
     
-    $actualFiles = glob("{$GLOBALS['saveDir']}/*.zip");
+    $actualFiles = glob("$saveDir/*.zip");
     $actualFileNames = array_map('basename', $actualFiles);
     
     if (!file_exists($selectedSave)) {
@@ -479,7 +487,7 @@ function handleStart() {
             'error' => '选择的存档文件不存在：' . $map,
             'selected_file' => $selectedSave,
             'actual_files' => $actualFileNames,
-            'save_dir' => $GLOBALS['saveDir']
+            'save_dir' => $saveDir
         ]);
         exit;
     }
@@ -491,7 +499,7 @@ function handleStart() {
         }
     }
     
-    // 从配置文件中读取 RCON 设置
+    // 从配置文件中读取 RCON 设置和白名单设置
     $configFilePath = "{$GLOBALS['configDir']}/$cfg";
     $serverSettings = [];
     if (file_exists($configFilePath)) {
@@ -514,12 +522,34 @@ function handleStart() {
         $rconArgs = sprintf('--rcon-port %d --rcon-password %s', $rconPort, escapeshellarg($rconPassword));
     }
     
+    // 白名单设置
+    $useWhitelist = $serverSettings['use_server_whitelist'] ?? false;
+    $whitelistArg = $useWhitelist ? '--use-server-whitelist' : '';
+    
     // 日志文件名与配置名绑定
     $configName = preg_replace('/\.json$/i', '', $cfg);
     $logFile = $GLOBALS['baseDir'] . "/logs/factorio-{$configName}.log";
     $logDir = dirname($logFile);
     if (!is_dir($logDir)) {
         mkdir($logDir, 0755, true);
+    }
+    
+    // 如果日志文件已存在，备份旧日志（避免日志过于庞大）
+    if (file_exists($logFile) && filesize($logFile) > 0) {
+        $backupTime = date('Y-m-d_His');
+        $backupFile = $GLOBALS['baseDir'] . "/logs/factorio-{$configName}-{$backupTime}.log";
+        @rename($logFile, $backupFile);
+        
+        // 清理超过7天的旧备份日志
+        $oldBackups = glob($GLOBALS['baseDir'] . "/logs/factorio-{$configName}-*.log");
+        if ($oldBackups) {
+            $expireTime = time() - (7 * 24 * 60 * 60);
+            foreach ($oldBackups as $oldBackup) {
+                if (filemtime($oldBackup) < $expireTime) {
+                    @unlink($oldBackup);
+                }
+            }
+        }
     }
     
     // 保存当前使用的配置文件名（不保存密码，密码从配置文件读取）
@@ -532,17 +562,25 @@ function handleStart() {
     file_put_contents($GLOBALS['logDir'] . '/runtimeConfig.json', json_encode($runtimeConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     
     $cmd = sprintf(
-        "screen -dmS %s bash -c \"cd %s && %s --start-server %s --server-settings %s --mod-directory %s --use-server-whitelist %s >> %s 2>&1\"",
+        "screen -dmS %s bash -c \"cd %s && %s --start-server %s --server-settings %s --mod-directory %s %s %s >> %s 2>&1\"",
         escapeshellarg($screenName),
         escapeshellarg($GLOBALS['serverRoot']),
         escapeshellarg($bin),
         escapeshellarg($currentSave),
         escapeshellarg($configFilePath),
         escapeshellarg($GLOBALS['modDir']),
+        $whitelistArg,
         $rconArgs,
         escapeshellarg($logFile)
     );
     shell_exec($cmd);
+    
+    // 更新 factorio-current.log 符号链接指向当前配置的日志文件
+    $currentLogLink = $GLOBALS['baseDir'] . '/factorio-current.log';
+    if (file_exists($currentLogLink) || is_link($currentLogLink)) {
+        @unlink($currentLogLink);
+    }
+    @symlink($logFile, $currentLogLink);
     
     // 服务器启动后立即设置缓存状态为运行中，避免状态闪烁
     global $serverRunningCache;
@@ -664,6 +702,10 @@ function handleSetCurrentSave() {
         $rconArgs = sprintf('--rcon-port %d --rcon-password %s', $rconPort, escapeshellarg($rconPassword));
     }
     
+    // 白名单设置
+    $useWhitelist = $serverSettings['use_server_whitelist'] ?? false;
+    $whitelistArg = $useWhitelist ? '--use-server-whitelist' : '';
+    
     $configName = preg_replace('/\.json$/i', '', $cfg);
     $logFile = $GLOBALS['baseDir'] . "/logs/factorio-{$configName}.log";
     $logDir = dirname($logFile);
@@ -682,13 +724,14 @@ function handleSetCurrentSave() {
     file_put_contents($GLOBALS['logDir'] . '/runtimeConfig.json', json_encode($runtimeConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     
     $cmd = sprintf(
-        "screen -dmS %s bash -c \"cd %s && %s --start-server %s --server-settings %s --mod-directory %s --use-server-whitelist %s >> %s 2>&1\"",
+        "screen -dmS %s bash -c \"cd %s && %s --start-server %s --server-settings %s --mod-directory %s %s %s >> %s 2>&1\"",
         escapeshellarg($screenName),
         escapeshellarg($GLOBALS['serverRoot']),
         escapeshellarg($bin),
         escapeshellarg($src),
         escapeshellarg($configFilePath),
         escapeshellarg($GLOBALS['modDir']),
+        $whitelistArg,
         $rconArgs,
         escapeshellarg($logFile)
     );
@@ -1430,9 +1473,7 @@ function getLogFilePath($configName = null) {
     if (!empty($configName)) {
         $configName = preg_replace('/\.json$/i', '', $configName);
         $logFile = $GLOBALS['baseDir'] . "/logs/factorio-{$configName}.log";
-        if (file_exists($logFile)) {
-            return $logFile;
-        }
+        return $logFile;
     }
     
     $logsDir = $GLOBALS['baseDir'] . '/logs';
@@ -1687,13 +1728,25 @@ function handleRconStatus() {
     $error = null;
     
     if ($running && $rconEnabled && $hasPassword) {
-        try {
-            $rcon = new \App\Services\RconService($rconHost, $rconPort, $rconPassword, 3);
-            $rcon->connect();
-            $rcon->disconnect();
-            $connected = true;
-        } catch (\Exception $e) {
-            $error = $e->getMessage();
+        require_once __DIR__ . '/rconPoolClient.php';
+        $poolClient = new RconPoolClient();
+        $poolAvailable = $poolClient->ping()['success'] ?? false;
+        
+        if ($poolAvailable) {
+            $result = $poolClient->execute('/p');
+            $connected = $result['success'];
+            if (!$connected) {
+                $error = $result['error'] ?? '连接池执行失败';
+            }
+        } else {
+            try {
+                $rcon = new \App\Services\RconService($rconHost, $rconPort, $rconPassword, 3);
+                $rcon->connect();
+                $rcon->disconnect();
+                $connected = true;
+            } catch (\Exception $e) {
+                $error = $e->getMessage();
+            }
         }
     }
     
@@ -2420,7 +2473,14 @@ function handleLogHistory() {
     $limit = min($limit, 500);
     
     if (!file_exists($logFile)) {
-        echo json_encode(['success' => true, 'entries' => [], 'total' => 0, 'offset' => 0]);
+        echo json_encode([
+            'success' => true, 
+            'entries' => [], 
+            'total' => 0, 
+            'offset' => 0,
+            'log_file' => basename($logFile),
+            'message' => '该配置暂无日志文件'
+        ]);
         exit;
     }
     
@@ -2467,9 +2527,138 @@ function handleLogHistory() {
         'entries' => $entries,
         'total' => $totalLines,
         'offset' => $offset,
-        'hasMore' => $hasMore
+        'hasMore' => $hasMore,
+        'log_file' => basename($logFile)
     ]);
     exit;
+}
+
+function handleLogFiles() {
+    $logsDir = $GLOBALS['baseDir'] . '/logs';
+    $files = [];
+    
+    if (is_dir($logsDir)) {
+        $logFiles = glob("$logsDir/factorio-*.log");
+        
+        // 获取当前使用的配置
+        $runtimeConfigFile = $GLOBALS['logDir'] . '/runtimeConfig.json';
+        $currentConfig = null;
+        if (file_exists($runtimeConfigFile)) {
+            $runtimeConfig = json_decode(file_get_contents($runtimeConfigFile), true);
+            if ($runtimeConfig && !empty($runtimeConfig['config_file'])) {
+                $currentConfig = preg_replace('/\.json$/i', '', $runtimeConfig['config_file']);
+            }
+        }
+        
+        foreach ($logFiles as $file) {
+            $filename = basename($file);
+            $filesize = filesize($file);
+            $modified = filemtime($file);
+            
+            // 判断是否为当前日志
+            $isCurrent = false;
+            $isBackup = false;
+            
+            if ($currentConfig && $filename === "factorio-{$currentConfig}.log") {
+                $isCurrent = true;
+            }
+            
+            // 判断是否为备份日志（包含时间戳格式）
+            if (preg_match('/factorio-.+-\d{4}-\d{2}-\d{2}_\d{6}\.log$/', $filename)) {
+                $isBackup = true;
+            }
+            
+            $files[] = [
+                'filename' => $filename,
+                'size' => formatFileSize($filesize),
+                'size_bytes' => $filesize,
+                'modified' => date('Y-m-d H:i:s', $modified),
+                'is_current' => $isCurrent,
+                'is_backup' => $isBackup
+            ];
+        }
+        
+        // 按修改时间降序排序
+        usort($files, function($a, $b) {
+            return strtotime($b['modified']) - strtotime($a['modified']);
+        });
+    }
+    
+    echo json_encode([
+        'success' => true,
+        'files' => $files
+    ]);
+    exit;
+}
+
+function handleDownloadLog() {
+    $filename = basename($_GET['filename'] ?? '');
+    
+    if (empty($filename) || !preg_match('/^factorio-.+\.log$/', $filename)) {
+        echo json_encode(['success' => false, 'error' => '无效的文件名']);
+        exit;
+    }
+    
+    $filepath = $GLOBALS['baseDir'] . '/logs/' . $filename;
+    
+    if (!file_exists($filepath)) {
+        echo json_encode(['success' => false, 'error' => '文件不存在']);
+        exit;
+    }
+    
+    header('Content-Type: text/plain');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Content-Length: ' . filesize($filepath));
+    readfile($filepath);
+    exit;
+}
+
+function handleDeleteLog() {
+    $filename = basename($_POST['filename'] ?? '');
+    
+    if (empty($filename) || !preg_match('/^factorio-.+\.log$/', $filename)) {
+        echo json_encode(['success' => false, 'error' => '无效的文件名']);
+        exit;
+    }
+    
+    $filepath = $GLOBALS['baseDir'] . '/logs/' . $filename;
+    
+    if (!file_exists($filepath)) {
+        echo json_encode(['success' => false, 'error' => '文件不存在']);
+        exit;
+    }
+    
+    // 检查是否为当前使用的日志
+    $runtimeConfigFile = $GLOBALS['logDir'] . '/runtimeConfig.json';
+    if (file_exists($runtimeConfigFile)) {
+        $runtimeConfig = json_decode(file_get_contents($runtimeConfigFile), true);
+        if ($runtimeConfig && !empty($runtimeConfig['config_file'])) {
+            $currentConfig = preg_replace('/\.json$/i', '', $runtimeConfig['config_file']);
+            if ($filename === "factorio-{$currentConfig}.log") {
+                echo json_encode(['success' => false, 'error' => '无法删除当前正在使用的日志文件']);
+                exit;
+            }
+        }
+    }
+    
+    if (@unlink($filepath)) {
+        echo json_encode(['success' => true, 'message' => '日志文件已删除']);
+    } else {
+        echo json_encode(['success' => false, 'error' => '删除失败，请检查权限']);
+    }
+    exit;
+}
+
+function formatFileSize($bytes) {
+    if ($bytes >= 1073741824) {
+        return number_format($bytes / 1073741824, 2) . ' GB';
+    } elseif ($bytes >= 1048576) {
+        return number_format($bytes / 1048576, 2) . ' MB';
+    } elseif ($bytes >= 1024) {
+        return number_format($bytes / 1024, 2) . ' KB';
+    } else {
+        return $bytes . ' B';
+    }
 }
 
 function parseLogLine($line) {
@@ -2760,5 +2949,8 @@ function handleAutoResponderRunOnce() {
     ]);
     exit;
 }
+
+// 刷新输出缓冲，确保所有JSON响应被正确发送
+ob_end_flush();
 
 
