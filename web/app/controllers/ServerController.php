@@ -212,4 +212,18 @@ class ServerController
             'server_id' => $serverId
         ]);
     }
+
+    public function generateMap(array $params): void
+    {
+        $result = $this->serverService->generateMap($params);
+
+        if (isset($result['error'])) {
+            Response::error($result['error']);
+        }
+
+        Response::success([
+            'map_file' => $result['map_file'] ?? null,
+            'file_size' => $result['file_size'] ?? null
+        ], $result['message']);
+    }
 }

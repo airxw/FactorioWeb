@@ -130,7 +130,25 @@ if (!$useCache) {
     ]));
 }
 
-// 输出 JSON
+$rconStatus = ['connected' => false, 'rcon_port' => 27015];
+if ($isAppRunning) {
+    $runtimeConfigFile = dirname(__DIR__) . '/logs/runtimeConfig.json';
+    if (file_exists($runtimeConfigFile)) {
+        $rc = json_decode(file_get_contents($runtimeConfigFile), true);
+        if (!empty($rc['config_file'])) {
+            $cfg = json_decode(file_get_contents(dirname(__DIR__) . '/config/serverConfigs/' . $rc['config_file']), true);
+            $rconSettings = $cfg['rcon'] ?? [];
+            $rconPort = (int)($rconSettings['port'] ?? 27015);
+            $rconPwd = $rconSettings['password'] ?? '';
+            $rconStatus['rcon_port'] = $rconPort;
+            if (!empty($rconPwd)) {
+                $fp = @fsockopen('127.0.0.1', $rconPort, $errno, $errstr, 1);
+                if ($fp) { fclose($fp); $rconStatus['connected'] = true; }
+            }
+        }
+    }
+}
+
 echo json_encode([
     'os' => php_uname('s') . ' ' . php_uname('r'),
     'cpu_name' => $cpuInfo['name'],
@@ -151,6 +169,8 @@ echo json_encode([
         'percent' => ($diskTotal>0) ? round(($diskTotal-$diskFree)/$diskTotal*100, 1) : 0
     ],
     'net' => $net,
-    'app_running' => $isAppRunning
+    'app_running' => $isAppRunning,
+    'rcon_connected' => $rconStatus['connected'],
+    'rcon_port' => $rconStatus['rcon_port']
 ]);
 ?>

@@ -2,138 +2,179 @@
 
 namespace App\Services;
 
+use App\Core\Database;
+
 class VoteService
 {
-    private StateService $stateService;
-    private string $voteStateFile = 'voteState';
-    private string $voteCooldownFile = 'voteCooldown';
+    private Database $db;
 
-    public function __construct(StateService $stateService = null)
+    public function __construct(Database $db = null)
     {
-        $this->stateService = $stateService ?? new StateService();
+        $this->db = $db ?? Database::getInstance();
     }
 
     public function startVoteKick(string $player, string $target, int $requiredVotes): array
     {
-        $state = $this->loadVoteState();
-        
-        $state['active'] = true;
-        $state['initiator'] = $player;
-        $state['target'] = $target;
-        $state['required'] = $requiredVotes;
-        $state['votes'] = [$player => true];
-        $state['startTime'] = time();
-        
-        $this->saveVoteState($state);
-        
-        return $state;
+        $this->endVote();
+
+        $this->db->execute(
+            'INSERT INTO votes (is_active, initiator, target, required_votes, start_time, created_at) VALUES (1, :initiator, :target, :required, :start, :created)',
+            [
+                ':initiator' => $player,
+                ':target' => $target,
+                ':required' => $requiredVotes,
+                ':start' => time(),
+                ':created' => time()
+            ]
+        );
+
+        $voteId = $this->db->lastInsertId();
+
+        $this->db->execute(
+            'INSERT INTO vote_records (vote_id, player_name, vote_bool, voted_at) VALUES (:voteId, :player, 1, :votedAt)',
+            [':voteId' => $voteId, ':player' => $player, ':votedAt' => time()]
+        );
+
+        return [
+            'active' => true,
+            'initiator' => $player,
+            'target' => $target,
+            'required' => $requiredVotes,
+            'votes' => [$player => true],
+            'startTime' => time()
+        ];
     }
 
     public function processVote(string $player, bool $vote): array
     {
-        $state = $this->loadVoteState();
-        
-        if (!$state['active']) {
+        $activeVote = $this->loadActiveVote();
+
+        if (!$activeVote['active']) {
             return ['success' => false, 'message' => '没有进行中的投票'];
         }
-        
-        if (isset($state['votes'][$player])) {
+
+        $existing = $this->db->query(
+            'SELECT id FROM vote_records WHERE vote_id = :voteId AND player_name = :player',
+            [':voteId' => $activeVote['id'], ':player' => $player]
+        );
+
+        if (!empty($existing)) {
             return ['success' => false, 'message' => '你已经投过票了'];
         }
-        
-        $state['votes'][$player] = $vote;
-        $this->saveVoteState($state);
-        
-        $yesVotes = count(array_filter($state['votes']));
-        $totalVotes = count($state['votes']);
-        
+
+        $this->db->execute(
+            'INSERT INTO vote_records (vote_id, player_name, vote_bool, voted_at) VALUES (:voteId, :player, :voteBool, :votedAt)',
+            [':voteId' => $activeVote['id'], ':player' => $player, ':voteBool' => $vote ? 1 : 0, ':votedAt' => time()]
+        );
+
+        $yesVotes = $this->db->query(
+            'SELECT COUNT(*) as cnt FROM vote_records WHERE vote_id = :voteId AND vote_bool = 1',
+            [':voteId' => $activeVote['id']]
+        )[0]['cnt'];
+
+        $totalVotes = $this->db->query(
+            'SELECT COUNT(*) as cnt FROM vote_records WHERE vote_id = :voteId',
+            [':voteId' => $activeVote['id']]
+        )[0]['cnt'];
+
         return [
             'success' => true,
-            'yesVotes' => $yesVotes,
-            'totalVotes' => $totalVotes,
-            'required' => $state['required'],
-            'passed' => $yesVotes >= $state['required']
+            'yesVotes' => (int)$yesVotes,
+            'totalVotes' => (int)$totalVotes,
+            'required' => $activeVote['required_votes'],
+            'passed' => (int)$yesVotes >= $activeVote['required_votes']
         ];
     }
 
     public function checkVoteStatus(string $player = null): array
     {
-        $state = $this->loadVoteState();
-        
-        if (!$state['active']) {
+        $activeVote = $this->loadActiveVote();
+
+        if (!$activeVote['active']) {
             return ['active' => false];
         }
-        
-        $yesVotes = count(array_filter($state['votes']));
-        $totalVotes = count($state['votes']);
-        
+
+        $yesVotes = $this->db->query(
+            'SELECT COUNT(*) as cnt FROM vote_records WHERE vote_id = :voteId AND vote_bool = 1',
+            [':voteId' => $activeVote['id']]
+        )[0]['cnt'];
+
+        $totalVotes = $this->db->query(
+            'SELECT COUNT(*) as cnt FROM vote_records WHERE vote_id = :voteId',
+            [':voteId' => $activeVote['id']]
+        )[0]['cnt'];
+
+        $hasVoted = false;
+        if ($player) {
+            $voted = $this->db->query(
+                'SELECT id FROM vote_records WHERE vote_id = :voteId AND player_name = :player',
+                [':voteId' => $activeVote['id'], ':player' => $player]
+            );
+            $hasVoted = !empty($voted);
+        }
+
         return [
             'active' => true,
-            'target' => $state['target'],
-            'initiator' => $state['initiator'],
-            'yesVotes' => $yesVotes,
-            'totalVotes' => $totalVotes,
-            'required' => $state['required'],
-            'startTime' => $state['startTime'],
-            'hasVoted' => $player ? isset($state['votes'][$player]) : false,
-            'passed' => $yesVotes >= $state['required']
+            'target' => $activeVote['target'],
+            'initiator' => $activeVote['initiator'],
+            'yesVotes' => (int)$yesVotes,
+            'totalVotes' => (int)$totalVotes,
+            'required' => $activeVote['required_votes'],
+            'startTime' => $activeVote['start_time'],
+            'hasVoted' => $hasVoted,
+            'passed' => (int)$yesVotes >= $activeVote['required_votes']
         ];
     }
 
     public function endVote(): void
     {
-        $this->saveVoteState([
-            'active' => false,
-            'initiator' => null,
-            'target' => null,
-            'required' => 0,
-            'votes' => [],
-            'startTime' => 0
-        ]);
+        $this->db->execute('UPDATE votes SET is_active = 0');
     }
 
     public function saveVoteCooldown(string $player, int $duration = 300): void
     {
-        $cooldowns = $this->stateService->loadState($this->voteCooldownFile);
-        $cooldowns[$player] = time() + $duration;
-        $this->stateService->saveState($this->voteCooldownFile, $cooldowns);
+        $this->db->execute(
+            'INSERT OR REPLACE INTO vote_cooldowns (player_name, cooldown_until) VALUES (:player, :until)',
+            [':player' => $player, ':until' => time() + $duration]
+        );
     }
 
     public function checkVoteCooldown(string $player): bool
     {
-        $cooldowns = $this->stateService->loadState($this->voteCooldownFile);
-        
-        if (!isset($cooldowns[$player])) {
+        $result = $this->db->query(
+            'SELECT cooldown_until FROM vote_cooldowns WHERE player_name = :player',
+            [':player' => $player]
+        );
+
+        if (empty($result)) {
             return true;
         }
-        
-        if (time() > $cooldowns[$player]) {
-            unset($cooldowns[$player]);
-            $this->stateService->saveState($this->voteCooldownFile, $cooldowns);
+
+        if (time() > (int)$result[0]['cooldown_until']) {
+            $this->db->execute('DELETE FROM vote_cooldowns WHERE player_name = :player', [':player' => $player]);
             return true;
         }
-        
+
         return false;
     }
 
     public function getVoteCooldownRemaining(string $player): int
     {
-        $cooldowns = $this->stateService->loadState($this->voteCooldownFile);
-        
-        if (!isset($cooldowns[$player])) {
+        $result = $this->db->query(
+            'SELECT cooldown_until FROM vote_cooldowns WHERE player_name = :player',
+            [':player' => $player]
+        );
+
+        if (empty($result)) {
             return 0;
         }
-        
-        return max(0, $cooldowns[$player] - time());
+
+        return max(0, (int)$result[0]['cooldown_until'] - time());
     }
 
-    public function saveVoteState(array $state): void
+    private function loadActiveVote(): ?array
     {
-        $this->stateService->saveState($this->voteStateFile, $state);
-    }
-
-    public function loadVoteState(): array
-    {
-        return $this->stateService->loadState($this->voteStateFile);
+        $result = $this->db->query('SELECT * FROM votes WHERE is_active = 1 LIMIT 1');
+        return $result[0] ?? ['active' => false];
     }
 }

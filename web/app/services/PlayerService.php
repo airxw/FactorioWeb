@@ -2,17 +2,16 @@
 
 namespace App\Services;
 
+use App\Core\Database;
+
 class PlayerService
 {
-    private StateService $stateService;
-    private string $historyFile = 'playerHistory';
-    private string $historyDir;
+    private Database $db;
     private ?string $configName = null;
 
-    public function __construct(StateService $stateService = null, string $configName = null)
+    public function __construct(Database $db = null, string $configName = null)
     {
-        $this->stateService = $stateService ?? new StateService();
-        $this->historyDir = dirname(__DIR__, 2) . '/config/state/playerHistory';
+        $this->db = $db ?? Database::getInstance();
         $this->configName = $configName;
     }
 
@@ -21,79 +20,127 @@ class PlayerService
         $this->configName = $configName;
     }
 
-    private function getHistoryFile(): string
+    private function getConfigName(): string
     {
-        if ($this->configName !== null) {
-            $configName = preg_replace('/\.json$/i', '', $this->configName);
-            if (!is_dir($this->historyDir)) {
-                mkdir($this->historyDir, 0755, true);
-            }
-            return $this->historyDir . '/' . $configName . '.json';
-        }
-        return dirname(__DIR__, 2) . '/config/state/playerHistory.json';
+        return $this->configName ?? 'default';
     }
 
     public function loadPlayerHistory(): array
     {
-        $file = $this->getHistoryFile();
-        if (!file_exists($file)) {
-            return [];
-        }
-        return json_decode(file_get_contents($file), true) ?? [];
+        return $this->db->query(
+            'SELECT player_name, first_join_time, last_join_time, join_count, last_leave_time, ip FROM player_histories WHERE config_name = :config_name',
+            [':config_name' => $this->getConfigName()]
+        );
     }
 
     public function savePlayerHistory(array $history): void
     {
-        $file = $this->getHistoryFile();
-        $dir = dirname($file);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        foreach ($history as $player => $data) {
+            $this->upsertPlayer($player, $data);
         }
-        file_put_contents($file, json_encode($history, JSON_PRETTY_PRINT));
+    }
+
+    private function upsertPlayer(string $player, array $data): void
+    {
+        $exists = $this->db->query(
+            'SELECT id FROM player_histories WHERE config_name = :config_name AND player_name = :player',
+            [':config_name' => $this->getConfigName(), ':player' => $player]
+        );
+
+        if (empty($exists)) {
+            $this->db->execute(
+                'INSERT INTO player_histories (config_name, player_name, first_join_time, last_join_time, join_count, ip, created_at, updated_at) VALUES (:config_name, :player, :firstJoin, :lastJoin, :joinCount, :ip, :created, :updated)',
+                [
+                    ':config_name' => $this->getConfigName(),
+                    ':player' => $player,
+                    ':firstJoin' => $data['firstJoin'] ?? time(),
+                    ':lastJoin' => $data['lastJoin'] ?? time(),
+                    ':joinCount' => $data['joinCount'] ?? 1,
+                    ':ip' => $data['ip'] ?? null,
+                    ':created' => time(),
+                    ':updated' => time()
+                ]
+            );
+        } else {
+            $this->db->execute(
+                'UPDATE player_histories SET last_join_time = :lastJoin, join_count = :joinCount, ip = :ip, updated_at = :updated WHERE config_name = :config_name AND player_name = :player',
+                [
+                    ':lastJoin' => $data['lastJoin'] ?? time(),
+                    ':joinCount' => $data['joinCount'] ?? 1,
+                    ':ip' => $data['ip'] ?? null,
+                    ':updated' => time(),
+                    ':config_name' => $this->getConfigName(),
+                    ':player' => $player
+                ]
+            );
+        }
     }
 
     public function isPlayerFirstJoin(string $player): bool
     {
-        $history = $this->loadPlayerHistory();
-        return !isset($history[$player]);
+        $result = $this->db->query(
+            'SELECT id FROM player_histories WHERE config_name = :config_name AND player_name = :player',
+            [':config_name' => $this->getConfigName(), ':player' => $player]
+        );
+        return empty($result);
     }
 
     public function recordPlayerJoin(string $player, string $ip = null): void
     {
-        $history = $this->loadPlayerHistory();
-        
-        if (!isset($history[$player])) {
-            $history[$player] = [
-                'firstJoin' => time(),
-                'lastJoin' => time(),
-                'joinCount' => 1,
-                'ip' => $ip
-            ];
+        $exists = $this->db->query(
+            'SELECT id, join_count FROM player_histories WHERE config_name = :config_name AND player_name = :player',
+            [':config_name' => $this->getConfigName(), ':player' => $player]
+        );
+
+        if (empty($exists)) {
+            $this->db->execute(
+                'INSERT INTO player_histories (config_name, player_name, first_join_time, last_join_time, join_count, ip, created_at, updated_at) VALUES (:config_name, :player, :firstJoin, :lastJoin, 1, :ip, :created, :updated)',
+                [
+                    ':config_name' => $this->getConfigName(),
+                    ':player' => $player,
+                    ':firstJoin' => time(),
+                    ':lastJoin' => time(),
+                    ':ip' => $ip,
+                    ':created' => time(),
+                    ':updated' => time()
+                ]
+            );
         } else {
-            $history[$player]['lastJoin'] = time();
-            $history[$player]['joinCount']++;
-            if ($ip) {
-                $history[$player]['ip'] = $ip;
-            }
+            $newCount = ($exists[0]['join_count'] ?? 0) + 1;
+            $this->db->execute(
+                'UPDATE player_histories SET last_join_time = :lastJoin, join_count = :count, ip = COALESCE(:ip, ip), updated_at = :updated WHERE config_name = :config_name AND player_name = :player',
+                [
+                    ':lastJoin' => time(),
+                    ':count' => $newCount,
+                    ':ip' => $ip,
+                    ':updated' => time(),
+                    ':config_name' => $this->getConfigName(),
+                    ':player' => $player
+                ]
+            );
         }
-        
-        $this->savePlayerHistory($history);
     }
 
     public function recordPlayerLeave(string $player): void
     {
-        $history = $this->loadPlayerHistory();
-        
-        if (isset($history[$player])) {
-            $history[$player]['lastLeave'] = time();
-            $this->savePlayerHistory($history);
-        }
+        $this->db->execute(
+            'UPDATE player_histories SET last_leave_time = :leaveTime, updated_at = :updated WHERE config_name = :config_name AND player_name = :player',
+            [
+                ':leaveTime' => time(),
+                ':updated' => time(),
+                ':config_name' => $this->getConfigName(),
+                ':player' => $player
+            ]
+        );
     }
 
     public function getPlayerInfo(string $player): ?array
     {
-        $history = $this->loadPlayerHistory();
-        return $history[$player] ?? null;
+        $result = $this->db->query(
+            'SELECT * FROM player_histories WHERE config_name = :config_name AND player_name = :player',
+            [':config_name' => $this->getConfigName(), ':player' => $player]
+        );
+        return $result[0] ?? null;
     }
 
     public function getPlayerIp(string $player): ?string
@@ -119,12 +166,9 @@ class PlayerService
 
     public function getRecentPlayers(int $limit = 10): array
     {
-        $history = $this->loadPlayerHistory();
-        
-        uasort($history, function($a, $b) {
-            return ($b['lastJoin'] ?? 0) - ($a['lastJoin'] ?? 0);
-        });
-        
-        return array_slice($history, 0, $limit, true);
+        return $this->db->query(
+            'SELECT * FROM player_histories WHERE config_name = :config_name ORDER BY last_join_time DESC LIMIT :limit',
+            [':config_name' => $this->getConfigName(), ':limit' => $limit]
+        );
     }
 }

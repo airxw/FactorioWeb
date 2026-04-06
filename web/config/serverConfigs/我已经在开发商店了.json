@@ -1,0 +1,43 @@
+{
+    "name": "[ieac] 我已经在开发商店了",
+    "description": "[QQ群:1137842268] 感谢Flander-one送的DLC，我已经在开发商店了",
+    "tags": [
+        "游戏",
+        "开发好累啊",
+        "何况还是一个人开发",
+        "python搞不定了"
+    ],
+    "max_players": 0,
+    "ignore_player_limit_for_returning_players": false,
+    "require_user_verification": true,
+    "visibility": {
+        "public": true,
+        "lan": true
+    },
+    "username": "airxw",
+    "password": "",
+    "token": "ace3aeeb9e132229801350077bd145",
+    "game_password": "",
+    "rcon": {
+        "enabled": true,
+        "port": 27015,
+        "password": "706cedad728283a7778e41c03078bad3"
+    },
+    "max_upload_in_kilobytes_per_second": 4000,
+    "max_upload_slots": 5,
+    "minimum_latency_in_ticks": 0,
+    "max_heartbeats_per_second": 60,
+    "allow_commands": "admins-only",
+    "only_admins_can_pause_the_game": true,
+    "autosave_interval": 60,
+    "autosave_slots": 10,
+    "autosave_only_on_server": true,
+    "non_blocking_saving": true,
+    "afk_autokick_interval": 0,
+    "auto_pause": true,
+    "auto_pause_when_players_connect": false,
+    "minimum_segment_size": 25,
+    "minimum_segment_size_peer_count": 20,
+    "maximum_segment_size": 100,
+    "maximum_segment_size_peer_count": 10
+}

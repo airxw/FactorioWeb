@@ -264,10 +264,13 @@
                     </select>
                 </div>
                 <div class="header-actions">
+                    <button class="btn-icon" onclick="loadPendingOrders()" title="加载待发放订单">
+                        <i class="bi bi-list-check"></i>
+                    </button>
                     <button class="btn-icon" onclick="clearOutput()" title="清空输出">
                         <i class="bi bi-trash"></i>
                     </button>
-                    <a href="index.html" class="btn-icon" title="返回控制面板">
+                    <a href="dashboard.html" class="btn-icon" title="返回控制面板">
                         <i class="bi bi-arrow-left"></i>
                     </a>
                 </div>
@@ -498,6 +501,89 @@
         function clearOutput() {
             document.getElementById('output').innerHTML = '';
             addLine('system', '输出已清空');
+        }
+
+        async function loadPendingOrders() {
+            addLine('system', '正在加载待发放订单...');
+            try {
+                const res = await fetch('/app/api.php?action=pending_orders');
+                const data = await res.json();
+                
+                if (data.error) {
+                    addLine('error', '加载订单失败: ' + data.error);
+                    return;
+                }
+
+                const orders = data.orders || [];
+                if (orders.length === 0) {
+                    addLine('system', '没有待发放的订单');
+                    return;
+                }
+
+                addLine('system', `找到 ${orders.length} 个待发放订单：`);
+                orders.forEach(order => {
+                    const itemCode = (order.item_id === 0) ? (order.rcon_command || '未知') : (order.item_code || '未知');
+                    const quality = (order.item_id === 0) ? (order.remarks ? ` 品质:${order.remarks}` : '') : (order.quality ? ` 品质:${order.quality}` : '');
+                    addLine('system', `订单 #${order.id}: ${itemCode} ×${order.quantity} 玩家:${order.player_name}${quality}`);
+                    
+                    // 添加快速发放按钮
+                    const line = document.createElement('div');
+                    line.className = 'rcon-line system';
+                    const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                    line.innerHTML = `
+                        <span class="line-time">${time}</span>
+                        <span class="line-prefix">*</span>
+                        <span class="line-content">
+                            <button onclick="deliverOrder(${order.id})" style="background:#238636;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;margin-right:8px;">发放订单</button>
+                            订单 #${order.id}
+                        </span>
+                    `;
+                    document.getElementById('output').appendChild(line);
+                });
+            } catch (e) {
+                addLine('error', '加载订单失败: ' + e.message);
+            }
+        }
+
+        async function deliverOrder(orderId) {
+            if (!isConnected) {
+                addLine('error', 'RCON未连接，无法发放订单');
+                return;
+            }
+
+            const playerName = prompt('请输入玩家名称（订单 #' + orderId + '）:');
+            if (!playerName || !playerName.trim()) {
+                addLine('system', '已取消发放订单');
+                return;
+            }
+            
+            const trimmedPlayer = playerName.trim();
+            addLine('system', `正在发放订单 #${orderId} 给玩家: ${trimmedPlayer}...`);
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'deliver_order');
+                formData.append('order_id', orderId);
+                formData.append('player_name', trimmedPlayer);
+                
+                const res = await fetch('/app/api.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    addLine('response', `订单 #${orderId} 发放成功！`);
+                    if (data.rcon_response) {
+                        addLine('response', `RCON返回: ${data.rcon_response}`);
+                    }
+                } else {
+                    addLine('error', `订单 #${orderId} 发放失败: ${data.error}`);
+                }
+            } catch (e) {
+                addLine('error', `发放订单失败: ${e.message}`);
+            }
         }
     </script>
 </body>

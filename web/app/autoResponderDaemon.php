@@ -12,8 +12,8 @@
  * 2. 状态文件冲突导致消息重复发送
  * 3. PID 文件不一致
  * 
- * 唯一正确的启动方式：Web界面 -> 自动响应系统 -> 点击"启动"按钮
- * 唯一正确的停止方式：Web界面 -> 自动响应系统 -> 点击"停止"按钮
+ * 自动响应系统随服务器启停联动运行，无需手动管理。
+ * 启动服务器时自动启动，停止服务器时自动停止。
  */
 
 define('WEB_DIR', dirname(__DIR__));
@@ -45,19 +45,25 @@ define('LOG_LEVEL_ERROR', 3);
 define('CURRENT_LOG_LEVEL', LOG_LEVEL_INFO);
 
 require_once __DIR__ . '/factorioRcon.php';
+require_once __DIR__ . '/core/Database.php';
 require_once __DIR__ . '/services/StateService.php';
 require_once __DIR__ . '/services/VoteService.php';
 require_once __DIR__ . '/services/ItemService.php';
 require_once __DIR__ . '/services/PlayerService.php';
 require_once __DIR__ . '/services/RconService.php';
+require_once __DIR__ . '/services/UserService.php';
+require_once __DIR__ . '/services/ChatService.php';
 require_once __DIR__ . '/core/LogConfig.php';
 
 use App\Core\LogConfig;
+use App\Core\Database;
 use App\Services\StateService;
 use App\Services\VoteService;
 use App\Services\ItemService;
 use App\Services\PlayerService;
 use App\Services\RconService;
+use App\Services\UserService;
+use App\Services\ChatService;
 
 $rconConfigRaw = file_exists(WEB_DIR . '/config/system/rcon.php') ? require WEB_DIR . '/config/system/rcon.php' : [];
 if (isset($rconConfigRaw['default'])) {
@@ -340,19 +346,72 @@ function executeCommand($command)
 function sendChatMessage($message) {
     global $rconConfig;
     
-    if ($rconConfig['rcon_enabled']) {
-        $command = '/c game.print("' . str_replace('"', '\\"', $message) . '", {r = 1, g = 1, b = 1})';
-        executeCommand($command);
-        $logLine = date('Y-m-d H:i:s') . ' [CHAT] <server>: ' . $message . "\n";
-        $logFile = getCurrentLogFile();
-        if ($logFile) {
-            file_put_contents($logFile, $logLine, FILE_APPEND);
-        }
-    } else {
-        $command = '/say ' . $message;
-        executeCommand($command);
+    // 使用 Factorio 正确的命令格式发送消息
+    $command = '/c game.print("' . str_replace('"', '\\"', $message) . '")';
+    executeCommand($command);
+    
+    $logLine = date('Y-m-d H:i:s') . ' [CHAT] <server>: ' . $message . "\n";
+    $logFile = getCurrentLogFile();
+    if ($logFile) {
+        file_put_contents($logFile, $logLine, FILE_APPEND);
     }
     logInfo('发送消息: [public] ' . $message);
+}
+
+// 处理游戏ID绑定
+function handleGameIdBinding($playerName) {
+    $db = Database::getInstance();
+    $db->initialize();
+
+    $result = $db->query(
+        'SELECT id, binding_code, vip_level, game_id FROM users WHERE binding_code IS NOT NULL AND binding_code != ""',
+        []
+    );
+
+    if (empty($result)) {
+        return;
+    }
+
+    foreach ($result as $user) {
+        if (!empty($user['binding_code']) && $playerName === $user['binding_code']) {
+            $userId = (int)$user['id'];
+            $newVipLevel = min((int)$user['vip_level'] + 1, 4);
+
+            $db->execute(
+                'UPDATE users SET game_id = ?, binding_code = NULL, vip_level = ?, updated_at = ? WHERE id = ?',
+                [$playerName, $newVipLevel, time(), $userId]
+            );
+
+            logInfo("游戏ID绑定成功: 用户ID {$userId} 绑定游戏ID {$playerName}, VIP等级提升至 {$newVipLevel}");
+            sendChatMessage("绑定成功！您的账号已绑定游戏ID: {$playerName}，VIP等级已提升至 " . getVipLevelName($newVipLevel));
+            return;
+        }
+    }
+}
+
+function getVipLevelName($level) {
+    $names = ['普通', '青铜', '白银', '黄金', '钻石'];
+    return $names[$level] ?? '普通';
+}
+
+function getPlayerVipLevel($playerName) {
+    try {
+        $db = Database::getInstance();
+        $db->initialize();
+
+        $result = $db->query(
+            'SELECT vip_level FROM users WHERE game_id = ?',
+            [$playerName]
+        );
+
+        if (!empty($result)) {
+            return (int)$result[0]['vip_level'];
+        }
+        return 0;
+    } catch (\Exception $e) {
+        logError('获取玩家VIP等级失败: ' . $e->getMessage());
+        return 0;
+    }
 }
 
 // 保存投票状态
@@ -896,6 +955,23 @@ function formatServerInfo($data) {
 
 // 获取配置
 function getSettings() {
+    static $chatService = null;
+    if ($chatService === null) {
+        try {
+            $chatService = new ChatService();
+        } catch (\Exception $e) {
+            logError('ChatService 初始化失败: ' . $e->getMessage());
+        }
+    }
+
+    if ($chatService !== null) {
+        try {
+            return $chatService->getSettings();
+        } catch (\Exception $e) {
+            logError('ChatService 获取设置失败: ' . $e->getMessage());
+        }
+    }
+
     if (!file_exists(SETTINGS_FILE)) {
         return [
             'scheduledTasks' => [],
@@ -1134,6 +1210,18 @@ function getFileInode($filepath) {
     return $stat ? $stat['ino'] : false;
 }
 
+function isFactorioRunning() {
+    $screenName = getCurrentScreenName();
+    
+    $screenCheck = shell_exec("screen -ls 2>/dev/null | grep -E '\." . preg_quote($screenName, '/') . "\s' || echo ''");
+    if (!empty(trim($screenCheck))) {
+        return true;
+    }
+    
+    $psCheck = shell_exec("ps aux | grep '[b]in/x64/factorio.*--start-server' 2>/dev/null");
+    return !empty(trim($psCheck));
+}
+
 // 监控日志文件
 function monitorLog() {
     global $rconConnection;
@@ -1180,6 +1268,13 @@ function monitorLog() {
     while (true) {
         try {
             pcntl_signal_dispatch();
+            
+            if (!isFactorioRunning()) {
+                logInfo('Factorio 服务器进程已停止，自动响应守护进程退出');
+                @unlink(PID_FILE);
+                saveState(['running' => false, 'stopped_at' => date('Y-m-d H:i:s'), 'reason' => 'server_stopped']);
+                exit(0);
+            }
             
             $currentTime = time();
             if ($currentTime - $lastScheduledCheck >= $scheduledCheckInterval) {
@@ -1478,23 +1573,42 @@ function processLogLine($line, &$lastMessageTime, $screenName = 'factorio_server
         $joinMatch = [];
         if (preg_match('/\[JOIN\]\s*(.+)\s+joined/', $line, $joinMatch)) {
             $player = trim($joinMatch[1]);
-            
+
             // 检查是否首次上线
             $isFirstJoin = isPlayerFirstJoin($player);
-            
+
             // 记录玩家上线
             recordPlayerJoin($player);
-            
+
+            // 处理游戏ID绑定
+            handleGameIdBinding($player);
+
             // 发送欢迎消息
-            $welcome = $settings['playerEvents']['welcome'] ?? null;
-            if ($welcome && $welcome['enabled'] && !empty($welcome['message'])) {
-                if ($currentTime - $lastMessageTime >= MIN_MESSAGE_INTERVAL) {
-                    $message = str_replace('{player}', $player, $welcome['message']);
-                    sendChatMessage($message);
-                    $lastMessageTime = $currentTime;
+            $vipLevel = getPlayerVipLevel($player);
+            $isVip = $vipLevel > 0;
+
+            if ($isVip) {
+                // VIP玩家欢迎消息
+                $vipWelcome = $settings['playerEvents']['vipWelcome'] ?? null;
+                if ($vipWelcome && $vipWelcome['enabled'] && !empty($vipWelcome['message'])) {
+                    if ($currentTime - $lastMessageTime >= MIN_MESSAGE_INTERVAL) {
+                        $message = str_replace('{player}', $player, $vipWelcome['message']);
+                        sendChatMessage($message);
+                        $lastMessageTime = $currentTime;
+                    }
+                }
+            } else {
+                // 普通玩家欢迎消息
+                $welcome = $settings['playerEvents']['welcome'] ?? null;
+                if ($welcome && $welcome['enabled'] && !empty($welcome['message'])) {
+                    if ($currentTime - $lastMessageTime >= MIN_MESSAGE_INTERVAL) {
+                        $message = str_replace('{player}', $player, $welcome['message']);
+                        sendChatMessage($message);
+                        $lastMessageTime = $currentTime;
+                    }
                 }
             }
-            
+
             // 派发礼包
             if ($isFirstJoin) {
                 // 首次上线礼包
@@ -1519,7 +1633,7 @@ function processLogLine($line, &$lastMessageTime, $screenName = 'factorio_server
             }
         }
     }
-    
+
     if (strpos($line, '[LEAVE]') !== false) {
         $leaveMatch = [];
         if (preg_match('/\[LEAVE\]\s*(.+)\s+left/', $line, $leaveMatch)) {
@@ -1570,6 +1684,22 @@ switch ($action) {
             exit(0);
         }
         
+        // 确保必要的目录存在
+        $runDir = dirname(PID_FILE);
+        if (!is_dir($runDir)) {
+            mkdir($runDir, 0755, true);
+        }
+        
+        $stateDir = dirname(STATE_FILE);
+        if (!is_dir($stateDir)) {
+            mkdir($stateDir, 0755, true);
+        }
+        
+        $logDir = dirname(DAEMON_LOG_FILE);
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+        
         // 保存 PID 并开始监控
         file_put_contents(PID_FILE, posix_getpid());
         saveState(['running' => true, 'started_at' => date('Y-m-d H:i:s')]);
@@ -1586,6 +1716,13 @@ switch ($action) {
         
     case 'run':
     case '--run-once':
+        // 检查是否已有守护进程在运行
+        $status = checkStatus();
+        if ($status['running']) {
+            echo json_encode(['success' => false, 'message' => '守护进程已在运行中 (PID: ' . $status['pid'] . ')']);
+            exit(0);
+        }
+        
         // 守护进程模式
         echo json_encode(['success' => true, 'message' => '守护进程已启动']);
         flush();

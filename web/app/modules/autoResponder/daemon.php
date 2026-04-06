@@ -2,28 +2,34 @@
 
 namespace Modules\AutoResponder;
 
+use App\Core\Database;
+use App\Services\StateService;
 use App\Services\RconService;
 
 class Daemon extends AutoResponder
 {
     private $pidFile;
-    private $positionFile;
+    private $db;
+    protected ?StateService $stateService = null;
+    private $useDatabase = true;
     private $itemsFile;
-    private $voteStateFile;
-    private $voteCooldownFile;
-    private $playerHistoryFile;
-    private $requestItemCooldownFile;
 
     public function __construct()
     {
         parent::__construct();
         $this->pidFile = dirname($this->webDir) . '/run/autoResponder.pid';
-        $this->positionFile = dirname($this->webDir) . '/config/state/autoResponderPosition.txt';
         $this->itemsFile = dirname($this->webDir) . '/config/game/items.json';
-        $this->voteStateFile = dirname($this->webDir) . '/config/state/voteState.json';
-        $this->voteCooldownFile = dirname($this->webDir) . '/config/state/voteCooldown.json';
-        $this->playerHistoryFile = dirname($this->webDir) . '/config/state/playerHistory.json';
-        $this->requestItemCooldownFile = dirname($this->webDir) . '/config/state/requestItemCooldown.json';
+
+        try {
+            $this->db = Database::getInstance();
+            $this->db->initialize();
+            $this->stateService = new StateService();
+        } catch (\Exception $e) {
+            $this->logError("数据库初始化失败，降级为内存模式: " . $e->getMessage());
+            $this->useDatabase = false;
+            $this->db = null;
+            $this->stateService = null;
+        }
     }
 
     public function run(): void
@@ -36,6 +42,7 @@ class Daemon extends AutoResponder
         file_put_contents($this->pidFile, getmypid());
 
         $this->logInfo('守护进程启动，PID: ' . getmypid());
+        $this->saveRunningState(true);
 
         $logFile = dirname($this->webDir) . '/factorio-current.log';
         $lastPosition = $this->loadFilePosition();
@@ -100,12 +107,11 @@ class Daemon extends AutoResponder
             $player = $matches[1];
             $this->logInfo("玩家加入: $player");
 
-            $playerEvents = $this->settings['playerEvents'] ?? [];
-            $welcome = $playerEvents['welcome'] ?? [];
-
-            if ($welcome['enabled'] ?? false) {
-                $message = str_replace('{player}', $player, $welcome['message'] ?? '欢迎 {player} 加入游戏!');
-                if ($welcome['type'] === 'private') {
+            $playerEvent = $this->getPlayerEvent('welcome');
+            if ($playerEvent && ($playerEvent['is_enabled'] ?? 0)) {
+                $message = str_replace('{player}', $player, $playerEvent['message'] ?? '欢迎 {player} 加入游戏!');
+                $msgType = $playerEvent['msg_type'] ?? 'public';
+                if ($msgType === 'private') {
                     $this->sendPrivateMessage($player, $message);
                 } else {
                     $this->sendChatMessage($message);
@@ -122,11 +128,9 @@ class Daemon extends AutoResponder
             $player = $matches[1];
             $this->logInfo("玩家离开: $player");
 
-            $playerEvents = $this->settings['playerEvents'] ?? [];
-            $goodbye = $playerEvents['goodbye'] ?? [];
-
-            if ($goodbye['enabled'] ?? false) {
-                $message = str_replace('{player}', $player, $goodbye['message'] ?? '{player} 离开了游戏');
+            $playerEvent = $this->getPlayerEvent('goodbye');
+            if ($playerEvent && ($playerEvent['is_enabled'] ?? 0)) {
+                $message = str_replace('{player}', $player, $playerEvent['message'] ?? '{player} 离开了游戏');
                 $this->sendChatMessage($message);
             }
         }
@@ -135,22 +139,23 @@ class Daemon extends AutoResponder
     protected function handlePlayerGift(string $player): void
     {
         $playerHistory = $this->loadPlayerHistory();
-        $playerEvents = $this->settings['playerEvents'] ?? [];
+        $isFirstJoin = !isset($playerHistory[$player]);
 
-        if (!isset($playerHistory[$player])) {
-            $gift = $playerEvents['firstJoinGift'] ?? [];
-            $playerHistory[$player] = ['first_join' => time(), 'join_count' => 1];
+        if ($isFirstJoin) {
+            $gift = $this->getPlayerEvent('firstJoinGift');
+            $this->updatePlayerHistory($player, ['first_join' => time(), 'join_count' => 1]);
             $this->logInfo("首次加入礼包: $player");
         } else {
-            $gift = $playerEvents['rejoinGift'] ?? [];
-            $playerHistory[$player]['join_count'] = ($playerHistory[$player]['join_count'] ?? 0) + 1;
-            $playerHistory[$player]['last_join'] = time();
+            $gift = $this->getPlayerEvent('rejoinGift');
+            $currentCount = $playerHistory[$player]['join_count'] ?? 1;
+            $this->updatePlayerHistory($player, [
+                'last_join' => time(),
+                'join_count' => $currentCount + 1
+            ]);
             $this->logInfo("再次加入礼包: $player");
         }
 
-        $this->savePlayerHistory($playerHistory);
-
-        if ($gift['enabled'] ?? false) {
+        if ($gift && ($gift['is_enabled'] ?? 0)) {
             $items = $gift['items'] ?? '';
             if (!empty($items)) {
                 $this->giveItemsToPlayer($player, $items);
@@ -166,6 +171,11 @@ class Daemon extends AutoResponder
 
             $this->logDebug("聊天消息 - $player: $message");
 
+            if (preg_match('/^FY\d{6}[A-Za-z0-9]{6}$/i', trim($message))) {
+                $this->handleOrderRedemption($player, trim($message));
+                return;
+            }
+
             $this->processTriggerResponses($player, $message);
             $this->processCommands($player, $message);
         }
@@ -173,33 +183,32 @@ class Daemon extends AutoResponder
 
     protected function processTriggerResponses(string $player, string $message): void
     {
-        $triggers = $this->settings['triggerResponses'] ?? [];
+        if (!$this->useDatabase) {
+            return;
+        }
 
-        foreach ($triggers as $trigger) {
-            if (!($trigger['enabled'] ?? true)) {
-                continue;
-            }
+        try {
+            $triggers = $this->db->query(
+                "SELECT * FROM chat_trigger_responses WHERE is_enabled = 1"
+            );
 
-            $keyword = $trigger['keyword'] ?? '';
-            if (empty($keyword)) {
-                continue;
-            }
+            foreach ($triggers as $trigger) {
+                $keyword = $trigger['keyword'] ?? '';
+                if (empty($keyword)) {
+                    continue;
+                }
 
-            if (stripos($message, $keyword) !== false) {
-                $response = $trigger['response'] ?? '';
-                $type = $trigger['type'] ?? 'public';
-
-                if (!empty($response)) {
-                    $response = str_replace(['{player}', '{keyword}'], [$player, $keyword], $response);
-
-                    if ($type === 'private') {
-                        $this->sendPrivateMessage($player, $response);
-                    } else {
+                if (stripos($message, $keyword) !== false) {
+                    $response = $trigger['response'] ?? '';
+                    if (!empty($response)) {
+                        $response = str_replace(['{player}', '{keyword}'], [$player, $keyword], $response);
                         $this->sendChatMessage($response);
+                        $this->logInfo("触发响应: $keyword -> $response");
                     }
-                    $this->logInfo("触发响应: $keyword -> $response");
                 }
             }
+        } catch (\Exception $e) {
+            $this->logError("处理关键词响应失败: " . $e->getMessage());
         }
     }
 
@@ -284,8 +293,8 @@ class Daemon extends AutoResponder
             'initiator' => $player,
             'target' => $target,
             'votes' => [$player => true],
-            'start_time' => $currentTime,
-            'duration' => 60
+            'startTime' => $currentTime,
+            'required' => 3
         ];
 
         $this->saveVoteState($voteState);
@@ -335,9 +344,9 @@ class Daemon extends AutoResponder
         }
 
         $currentTime = time();
-        $duration = $voteState['duration'] ?? 60;
+        $duration = 60;
 
-        if (($currentTime - $voteState['start_time']) > $duration) {
+        if (($currentTime - $voteState['startTime']) > $duration) {
             $this->sendChatMessage("投票踢人超时，{$voteState['target']} 未被踢出");
             $this->clearVoteState();
         }
@@ -453,73 +462,228 @@ class Daemon extends AutoResponder
 
     protected function loadFilePosition(): int
     {
-        if (file_exists($this->positionFile)) {
-            return (int)file_get_contents($this->positionFile);
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                return (int)$this->stateService->getStateValue('autoResponderState', 'lastLogPosition', 0);
+            } catch (\Exception $e) {
+                $this->logError("从数据库读取日志位置失败: " . $e->getMessage());
+            }
         }
         return 0;
     }
 
     protected function saveFilePosition(int $position): void
     {
-        file_put_contents($this->positionFile, $position);
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                $this->stateService->setStateValue('autoResponderState', 'lastLogPosition', $position);
+            } catch (\Exception $e) {
+                $this->logError("保存日志位置到数据库失败: " . $e->getMessage());
+            }
+        }
+    }
+
+    protected function saveRunningState(bool $isRunning): void
+    {
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                $this->stateService->setStateValue('autoResponderState', 'isRunning', $isRunning ? '1' : '0');
+            } catch (\Exception $e) {
+                $this->logError("保存运行状态到数据库失败: " . $e->getMessage());
+            }
+        }
     }
 
     protected function loadVoteState(): array
     {
-        if (file_exists($this->voteStateFile)) {
-            return json_decode(file_get_contents($this->voteStateFile), true) ?? [];
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                return $this->stateService->loadState('voteState');
+            } catch (\Exception $e) {
+                $this->logError("从数据库读取投票状态失败: " . $e->getMessage());
+            }
         }
         return [];
     }
 
     protected function saveVoteState(array $state): void
     {
-        file_put_contents($this->voteStateFile, json_encode($state, JSON_PRETTY_PRINT));
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                $this->stateService->saveState('voteState', $state);
+            } catch (\Exception $e) {
+                $this->logError("保存投票状态到数据库失败: " . $e->getMessage());
+            }
+        }
     }
 
     protected function clearVoteState(): void
     {
-        if (file_exists($this->voteStateFile)) {
-            unlink($this->voteStateFile);
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                $this->stateService->deleteState('voteState');
+            } catch (\Exception $e) {
+                $this->logError("清除投票状态失败: " . $e->getMessage());
+            }
         }
     }
 
     protected function loadVoteCooldown(): array
     {
-        if (file_exists($this->voteCooldownFile)) {
-            return json_decode(file_get_contents($this->voteCooldownFile), true) ?? [];
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                return $this->stateService->loadState('voteCooldown');
+            } catch (\Exception $e) {
+                $this->logError("从数据库读取投票冷却失败: " . $e->getMessage());
+            }
         }
         return [];
     }
 
     protected function saveVoteCooldown(array $cooldowns): void
     {
-        file_put_contents($this->voteCooldownFile, json_encode($cooldowns, JSON_PRETTY_PRINT));
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                $this->stateService->saveState('voteCooldown', $cooldowns);
+            } catch (\Exception $e) {
+                $this->logError("保存投票冷却到数据库失败: " . $e->getMessage());
+            }
+        }
     }
 
     protected function loadPlayerHistory(): array
     {
-        if (file_exists($this->playerHistoryFile)) {
-            return json_decode(file_get_contents($this->playerHistoryFile), true) ?? [];
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                return $this->stateService->loadState('playerHistory');
+            } catch (\Exception $e) {
+                $this->logError("从数据库读取玩家历史失败: " . $e->getMessage());
+            }
         }
         return [];
     }
 
-    protected function savePlayerHistory(array $history): void
+    protected function updatePlayerHistory(string $player, array $data): void
     {
-        file_put_contents($this->playerHistoryFile, json_encode($history, JSON_PRETTY_PRINT));
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                $history = $this->loadPlayerHistory();
+                $history[$player] = array_merge($history[$player] ?? [], $data);
+                $this->stateService->saveState('playerHistory', $history);
+            } catch (\Exception $e) {
+                $this->logError("更新玩家历史到数据库失败: " . $e->getMessage());
+            }
+        }
     }
 
     protected function loadRequestItemCooldown(): array
     {
-        if (file_exists($this->requestItemCooldownFile)) {
-            return json_decode(file_get_contents($this->requestItemCooldownFile), true) ?? [];
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                return $this->stateService->loadState('requestItemCooldown');
+            } catch (\Exception $e) {
+                $this->logError("从数据库读取物品请求冷却失败: " . $e->getMessage());
+            }
         }
         return [];
     }
 
     protected function saveRequestItemCooldown(array $cooldowns): void
     {
-        file_put_contents($this->requestItemCooldownFile, json_encode($cooldowns, JSON_PRETTY_PRINT));
+        if ($this->useDatabase && $this->stateService) {
+            try {
+                $this->stateService->saveState('requestItemCooldown', $cooldowns);
+            } catch (\Exception $e) {
+                $this->logError("保存物品请求冷却到数据库失败: " . $e->getMessage());
+            }
+        }
+    }
+
+    private function getPlayerEvent(string $eventType): ?array
+    {
+        if (!$this->useDatabase) {
+            return null;
+        }
+
+        try {
+            $result = $this->db->query(
+                "SELECT * FROM chat_player_events WHERE event_type = :eventType",
+                [':eventType' => $eventType]
+            );
+
+            return !empty($result) ? $result[0] : null;
+        } catch (\Exception $e) {
+            $this->logError("查询玩家事件配置失败 [$eventType]: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    private function handleOrderRedemption(string $playerName, string $orderNumber): void
+    {
+        $this->logInfo("订单领取请求: 玩家=$playerName, 订单号=$orderNumber");
+
+        $cacheKey = "order_redemption_{$orderNumber}_{$playerName}";
+        if ($this->isRateLimited($cacheKey, 5)) {
+            $this->sendPrivateMessage($playerName, "⏳ 请勿频繁操作，5秒后再试");
+            return;
+        }
+
+        $apiUrl = 'http://localhost/factorio/web/app/api.php';
+        $postData = http_build_query([
+            'action' => 'deliver_by_number',
+            'order_number' => $orderNumber,
+            'player_name' => $playerName
+        ]);
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => 'Content-Type: application/x-www-form-urlencoded',
+                'content' => $postData,
+                'timeout' => 10
+            ]
+        ]);
+
+        $response = @file_get_contents($apiUrl, false, $context);
+
+        if ($response === false) {
+            $this->sendPrivateMessage($playerName, "❌ 系统错误，请联系管理员");
+            error_log("[AutoResponder] Order redemption failed for {$orderNumber}: API call failed");
+            return;
+        }
+
+        $result = json_decode($response, true);
+
+        if (isset($result['success']) && $result['success']) {
+            $msg = "✅ 领取成功！\n";
+            $msg .= "已获得：{$result['item']} x{$result['quantity']}\n";
+            $msg .= "订单号：{$orderNumber}";
+            $this->sendPrivateMessage($playerName, $msg);
+            error_log("[AutoResponder] Order {$orderNumber} redeemed by {$playerName}");
+        } else {
+            $errorMsg = $result['error'] ?? '未知错误';
+            $this->sendPrivateMessage($playerName, "❌ 领取失败：{$errorMsg}");
+            error_log("[AutoResponder] Order redemption failed for {$orderNumber}: {$errorMsg}");
+        }
+    }
+
+    private function isRateLimited(string $cacheKey, int $cooldownSeconds): bool
+    {
+        $cacheFile = sys_get_temp_dir() . '/factorio_rate_limit_' . md5($cacheKey);
+
+        if (file_exists($cacheFile)) {
+            $lastTime = (int) file_get_contents($cacheFile);
+            if (time() - $lastTime < $cooldownSeconds) {
+                return true;
+            }
+        }
+
+        file_put_contents($cacheFile, time());
+        return false;
+    }
+
+    public function __destruct()
+    {
+        $this->saveRunningState(false);
     }
 }

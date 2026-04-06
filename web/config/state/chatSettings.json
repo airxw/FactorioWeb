@@ -1,53 +1,80 @@
 {
     "scheduledTasks": [],
-    "triggerResponses": [
-        {
-            "id": 1772864755334,
-            "keyword": "你好",
-            "response": "是的，我很好"
-        }
-    ],
-    "periodicMessages": [],
+    "triggerResponses": [],
     "serverResponses": [
         {
-            "type": "server-info",
-            "keyword": "服务器信息",
-            "value": ""
-        },
-        {
+            "id": 49,
             "type": "vote-kick",
-            "keyword": "-踢人",
-            "value": "{\"required\":\"3\",\"timeout\":\"60\",\"cooldown\":\"600\"}"
+            "keyword": "!votekick",
+            "value": "{\"votes\":\"3\",\"timeout\":\"60\",\"cooldown\":\"300\"}",
+            "created_at": 1775395142
         },
         {
+            "id": 51,
+            "type": "ping-test",
+            "keyword": "!ping",
+            "value": "{}",
+            "created_at": 1775395142
+        },
+        {
+            "id": 52,
+            "type": "server-info",
+            "keyword": "!server",
+            "value": "{}",
+            "created_at": 1775395142
+        },
+        {
+            "id": 53,
             "type": "ping-test",
             "keyword": "延迟",
-            "value": ""
+            "value": "{}",
+            "created_at": 1775395142
         },
         {
-            "type": "request-item",
-            "keyword": "腐竹爸爸给我点",
-            "value": "{\"count\":\"100\",\"cooldown\":\"60\"}"
+            "id": 54,
+            "type": "vote-kick",
+            "keyword": "踢人",
+            "value": "{\"votes\":\"3\",\"timeout\":\"60\",\"cooldown\":\"300\"}",
+            "created_at": 1775395142
+        },
+        {
+            "id": 55,
+            "type": "server-info",
+            "keyword": "服务器信息",
+            "value": "{}",
+            "created_at": 1775395523
         }
     ],
     "playerEvents": {
         "welcome": {
             "enabled": true,
-            "message": "{player}欢迎参与这个坐牢图，有事请加群1137842268，",
-            "type": "public"
+            "message": "欢迎{player}登陆，你可以去ieac.ecsrz.com:34199加入星际探索联盟理事会中",
+            "type": "public",
+            "items": ""
+        },
+        "vipWelcome": {
+            "enabled": true,
+            "message": "尊贵的{player}上线了",
+            "type": "public",
+            "items": ""
         },
         "goodbye": {
-            "enabled": true,
-            "message": "{player}逃跑了~",
-            "type": "public"
+            "enabled": false,
+            "message": "",
+            "type": "public",
+            "items": ""
         },
         "firstJoinGift": {
-            "enabled": true,
-            "items": "battery-mk2-equipment 10\nenergy-shield-mk2-equipment 10\npersonal-roboport-mk2-equipment 10\nfusion-reactor-equipment 6\nnight-vision-equipment 1\nexoskeleton-equipment 10\nassembling-machine-3 10\nelectric-furnace 100\nroboport 10\nlogistic-robot 100\nconstruction-robot 200\nturbo-underground-belt 50\nturbo-transport-belt 50\nturbo-splitter 50\nstack-filter-inserter 50\nstorage-chest 50\nexpress-loader 50"
+            "enabled": false,
+            "message": "",
+            "type": "public",
+            "items": ""
         },
         "rejoinGift": {
-            "enabled": true,
-            "items": "construction-robot 10\nlogistic-robot 5\nstorage-chest 10"
+            "enabled": false,
+            "message": "",
+            "type": "public",
+            "items": ""
         }
     }
 }

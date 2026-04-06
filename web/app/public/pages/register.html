@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factorio Server Pro - 注册</title>
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary: #f97316;
+            --primary-dark: #ea580c;
+            --bg-gradient: linear-gradient(135deg, #431407 0%, #2d1808 100%);
+            --login-card-bg: rgba(255, 255, 255, 0.95);
+            --text-primary: #431407;
+            --text-secondary: #9a3412;
+            --input-border: #fed7aa;
+            --input-bg: #ffffff;
+            --input-label: #c2410c;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            height: 100%;
+            font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+            background: var(--bg-gradient);
+        }
+        
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-card {
+            background: var(--login-card-bg);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 440px;
+            padding: 40px;
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        
+        .login-header i {
+            font-size: 48px;
+            color: var(--primary);
+            margin-bottom: 12px;
+        }
+        
+        .login-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        
+        .login-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .form-floating {
+            margin-bottom: 18px;
+        }
+        
+        .form-floating > .form-control {
+            border-radius: 10px;
+            border: 2px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text-primary);
+            padding: 18px 16px;
+            height: auto;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .form-floating > .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
+        }
+        
+        .form-floating > .form-control.is-invalid {
+            border-color: #ef4444;
+        }
+        
+        .form-floating > label {
+            padding: 18px 16px;
+            color: var(--input-label);
+            font-size: 14px;
+        }
+        
+        .invalid-feedback-custom {
+            color: #ef4444;
+            font-size: 0.8rem;
+            margin-top: 4px;
+            display: none;
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 13px;
+            border-radius: 10px;
+            background: var(--primary);
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-login:hover:not(:disabled) {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(249, 115, 22, 0.3);
+        }
+        
+        .btn-login:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            font-size: 0.9rem;
+        }
+        
+        .footer-text {
+            text-align: center;
+            margin-top: 22px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .footer-text a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .footer-text a:hover {
+            text-decoration: underline;
+        }
+
+        .password-strength {
+            height: 4px;
+            border-radius: 2px;
+            margin-top: -10px;
+            margin-bottom: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        @media (max-width: 576px) {
+            .login-card {
+                padding: 28px 20px;
+            }
+            
+            .login-header h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <i class="bi bi-person-plus-fill"></i>
+                <h1>创建账号</h1>
+                <p>有账号就能来买东西了</p>
+            </div>
+            
+            <div id="alert-container"></div>
+            
+            <form id="registerForm">
+                <div class="form-floating">
+                    <input type="text" class="form-control" id="username" placeholder="用户名" autocomplete="username" required pattern="[a-zA-Z0-9_]{3,20}">
+                    <label for="username"><i class="bi bi-person me-2"></i>用户名</label>
+                    <div class="invalid-feedback-custom" id="username-feedback">用户名为3-20位字母、数字或下划线</div>
+                </div>
+                
+                <div class="form-floating">
+                    <input type="text" class="form-control" id="nickname" placeholder="昵称" autocomplete="nickname">
+                    <label for="nickname"><i class="bi bi-tag me-2"></i>昵称（选填）</label>
+                </div>
+                
+                <div class="form-floating">
+                    <input type="password" class="form-control" id="password" placeholder="密码" autocomplete="new-password" required minlength="6">
+                    <label for="password"><i class="bi bi-lock me-2"></i>密码</label>
+                    <div class="password-strength" id="pwdStrength"></div>
+                    <div class="invalid-feedback-custom" id="password-feedback">密码至少6位</div>
+                </div>
+                
+                <div class="form-floating">
+                    <input type="password" class="form-control" id="confirmPassword" placeholder="确认密码" autocomplete="new-password" required minlength="6">
+                    <label for="confirmPassword"><i class="bi bi-lock-fill me-2"></i>确认密码</label>
+                    <div class="invalid-feedback-custom" id="confirm-feedback">两次输入的密码不一致</div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-login" id="registerBtn">
+                    <span id="btnText">立即注册</span>
+                    <span id="btnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                </button>
+            </form>
+            
+            <div class="footer-text">
+                已有账号？<a href="login.html">立即登录</a>
+                <p class="mb-1 mt-2"><i class="bi bi-shield-lock me-1"></i>不要设置太复杂的密码，能用就行避免信息泄露</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app/public/assets/js/jquery-3.6.0.min.js"></script>
+    <script src="/lib/vendor/bootstrap/js/bootstrap.bundle.js"></script>
+    <script>
+        function showAlert(message, type) {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                <i class="bi bi-${type === 'danger' ? 'exclamation-triangle' : type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            container.innerHTML = '';
+            container.appendChild(alert);
+        }
+
+        function setLoading(loading) {
+            const btn = document.getElementById('registerBtn');
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            btn.disabled = loading;
+            btnText.textContent = loading ? '注册中...' : '立即注册';
+            btnSpinner.classList.toggle('d-none', !loading);
+        }
+
+        function validateUsername(val) {
+            return /^[a-zA-Z0-9_]{3,20}$/.test(val);
+        }
+
+        function updatePasswordStrength(pwd) {
+            const bar = document.getElementById('pwdStrength');
+            let strength = 0;
+            if (pwd.length >= 6) strength++;
+            if (pwd.length >= 10) strength++;
+            if (/[A-Z]/.test(pwd)) strength++;
+            if (/[0-9]/.test(pwd)) strength++;
+            if (/[^A-Za-z0-9]/.test(pwd)) strength++;
+
+            const colors = ['#ef4444', '#f59e0b', '#eab308', '#84cc16', '#10b981'];
+            const widths = ['20%', '40%', '60%', '80%', '100%'];
+            bar.style.width = widths[Math.min(strength, 4)];
+            bar.style.backgroundColor = colors[Math.min(strength, 4)];
+        }
+
+        document.getElementById('username').addEventListener('blur', function () {
+            const val = this.value.trim();
+            const fb = document.getElementById('username-feedback');
+            if (val && !validateUsername(val)) {
+                this.classList.add('is-invalid');
+                fb.style.display = 'block';
+            } else {
+                this.classList.remove('is-invalid');
+                fb.style.display = 'none';
+            }
+        });
+
+        document.getElementById('password').addEventListener('input', function () {
+            updatePasswordStrength(this.value);
+        });
+
+        document.getElementById('confirmPassword').addEventListener('blur', function () {
+            const pwd = document.getElementById('password').value;
+            const fb = document.getElementById('confirm-feedback');
+            if (this.value && this.value !== pwd) {
+                this.classList.add('is-invalid');
+                fb.style.display = 'block';
+            } else {
+                this.classList.remove('is-invalid');
+                fb.style.display = 'none';
+            }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const nickname = document.getElementById('nickname').value.trim();
+
+            if (!validateUsername(username)) {
+                showAlert('用户名格式不正确：需要3-20位字母、数字或下划线', 'danger');
+                document.getElementById('username').focus();
+                return;
+            }
+            if (!password || password.length < 6) {
+                showAlert('密码长度不能少于6位', 'danger');
+                document.getElementById('password').focus();
+                return;
+            }
+            if (password !== confirmPassword) {
+                showAlert('两次输入的密码不一致', 'danger');
+                document.getElementById('confirmPassword').focus();
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const fd = new FormData();
+                fd.append('action', 'register');
+                fd.append('username', username);
+                fd.append('password', password);
+                fd.append('name', nickname || username);
+
+                const res = await fetch('../../api.php', { method: 'POST', body: fd });
+                const d = await res.json();
+
+                if (d.error) {
+                    showAlert(d.error, 'danger');
+                } else if (d.success) {
+                    showAlert('注册成功！正在跳转到登录页...', 'success');
+                    setTimeout(() => window.location.href = 'login.html', 1200);
+                } else {
+                    showAlert(d.message || '注册失败，请稍后重试', 'danger');
+                }
+            } catch (err) {
+                showAlert('网络错误，请检查网络连接后重试', 'danger');
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        });
+    </script>
+</body>
+</html>

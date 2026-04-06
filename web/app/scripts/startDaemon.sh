@@ -9,13 +9,13 @@
 # 
 # 直接启动可能导致多个守护进程实例同时运行，造成消息重复发送等问题。
 # 
-# 唯一正确的启动方式：Web界面 -> 自动响应系统 -> 点击"启动"按钮
-# 唯一正确的停止方式：Web界面 -> 自动响应系统 -> 点击"停止"按钮
+# 自动响应系统随服务器启停联动运行，无需手动管理。
+# 启动服务器时自动启动，停止服务器时自动停止。
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_DIR="$(dirname "$SCRIPT_DIR")"
-PID_FILE="$WEB_DIR/auto_responder.pid"
+PID_FILE="$(dirname "$WEB_DIR")/run/autoResponder.pid"
 DAEMON_SCRIPT="$WEB_DIR/auto_responder_daemon.php"
 
 if [ -f "$PID_FILE" ]; then

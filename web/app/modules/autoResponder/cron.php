@@ -2,16 +2,31 @@
 
 namespace Modules\AutoResponder;
 
+use App\Core\Database;
+use App\Services\StateService;
+
 class Cron extends AutoResponder
 {
     protected $logFile;
-    private $messageQueueFile;
+    private $db;
+    private $stateService;
+    private $useDatabase = true;
 
     public function __construct()
     {
         parent::__construct();
         $this->logFile = dirname($this->webDir) . '/logs/autoResponder.log';
-        $this->messageQueueFile = dirname($this->webDir) . '/config/state/messageQueue.json';
+
+        try {
+            $this->db = Database::getInstance();
+            $this->db->initialize();
+            $this->stateService = new StateService();
+        } catch (\Exception $e) {
+            $this->logError("数据库初始化失败，降级为内存模式: " . $e->getMessage());
+            $this->useDatabase = false;
+            $this->db = null;
+            $this->stateService = null;
+        }
     }
 
     public function run(): void
@@ -28,133 +43,182 @@ class Cron extends AutoResponder
 
     protected function processScheduledTasks(): void
     {
-        $tasks = $this->settings['scheduledTasks'] ?? [];
-        $currentTime = time();
-        $currentMinute = date('H:i');
+        if (!$this->useDatabase) {
+            $this->logWarning("数据库不可用，跳过定时任务处理");
+            return;
+        }
 
-        foreach ($tasks as $task) {
-            if (!($task['enabled'] ?? true)) {
-                continue;
-            }
+        try {
+            $tasks = $this->db->query(
+                "SELECT * FROM chat_scheduled_tasks WHERE is_enabled = 1"
+            );
 
-            $taskTime = $task['time'] ?? '';
-            if ($taskTime === $currentMinute) {
-                $lastRunKey = 'scheduled_' . ($task['id'] ?? md5(json_encode($task)));
-                $lastRun = $this->state[$lastRunKey] ?? 0;
+            $currentTime = time();
+            $currentMinute = date('H:i');
 
-                if ($currentTime - $lastRun < 60) {
-                    continue;
-                }
+            foreach ($tasks as $task) {
+                $taskTime = $task['scheduled_time'] ?? '';
+                if ($taskTime === $currentMinute) {
+                    $lastRunKey = 'scheduled_' . ($task['task_id'] ?? $task['id']);
+                    $lastRun = $this->getStateValue($lastRunKey, 0);
 
-                $message = $task['message'] ?? '';
-                $type = $task['type'] ?? 'public';
+                    if ($currentTime - $lastRun < 60) {
+                        continue;
+                    }
 
-                if (!empty($message)) {
-                    if ($type === 'private') {
-                        $this->logInfo("发送私密消息: $message");
-                    } else {
+                    $message = $task['message'] ?? '';
+                    if (!empty($message)) {
                         $this->sendChatMessage($message);
                         $this->logInfo("发送定时消息: $message");
                     }
-                }
 
-                $this->state[$lastRunKey] = $currentTime;
-                $this->saveState();
+                    $this->setStateValue($lastRunKey, $currentTime);
+                }
             }
+        } catch (\Exception $e) {
+            $this->logError("处理定时任务失败: " . $e->getMessage());
         }
     }
 
     protected function processPeriodicMessages(): void
     {
-        $periodicMessages = $this->settings['periodicMessages'] ?? [];
+        if (!$this->useDatabase) {
+            $this->logWarning("数据库不可用，跳过周期消息处理");
+            return;
+        }
 
-        foreach ($periodicMessages as $pm) {
-            if (!($pm['enabled'] ?? true)) {
-                continue;
-            }
+        try {
+            $tasks = $this->db->query(
+                "SELECT * FROM chat_scheduled_tasks WHERE is_enabled = 1 AND schedule_type IN ('15min', '30min', 'hourly', '2hour', '6hour', '12hour', 'daily')"
+            );
 
-            $interval = (int)($pm['interval'] ?? 0);
-            if ($interval <= 0) {
-                continue;
-            }
-
-            $key = 'periodic_' . ($pm['id'] ?? md5(json_encode($pm)));
-            $lastRun = $this->state[$key] ?? 0;
             $currentTime = time();
 
-            if ($currentTime - $lastRun >= $interval * 60) {
-                $message = $pm['message'] ?? '';
-                if (!empty($message)) {
-                    $this->sendChatMessage($message);
-                    $this->logInfo("发送周期消息: $message");
+            foreach ($tasks as $task) {
+                $scheduleType = $task['schedule_type'];
+                $interval = $this->getIntervalMinutes($scheduleType);
+
+                if ($interval <= 0) {
+                    continue;
                 }
-                $this->state[$key] = $currentTime;
-                $this->saveState();
+
+                $key = 'periodic_' . ($task['task_id'] ?? $task['id']);
+                $lastRun = $this->getStateValue($key, 0);
+
+                if ($currentTime - $lastRun >= $interval * 60) {
+                    if ($scheduleType === 'daily') {
+                        $scheduledTime = $task['scheduled_time'] ?? '';
+                        if (!empty($scheduledTime) && $scheduledTime !== date('H:i')) {
+                            continue;
+                        }
+                    }
+
+                    $message = $task['message'] ?? '';
+                    if (!empty($message)) {
+                        $this->sendChatMessage($message);
+                        $this->logInfo("发送周期消息 [$scheduleType]: $message");
+                    }
+
+                    $this->setStateValue($key, $currentTime);
+                }
             }
+        } catch (\Exception $e) {
+            $this->logError("处理周期消息失败: " . $e->getMessage());
         }
     }
 
     protected function processMessageQueue(): void
     {
-        if (!file_exists($this->messageQueueFile)) {
+        if (!$this->useDatabase) {
+            $this->logWarning("数据库不可用，跳过消息队列处理");
             return;
         }
 
-        $content = file_get_contents($this->messageQueueFile);
-        $queue = json_decode($content, true) ?? [];
+        try {
+            $messages = $this->db->query(
+                "SELECT * FROM message_queues WHERE is_sent = 0 AND (scheduled_at IS NULL OR scheduled_at <= :now) ORDER BY priority DESC, created_at ASC",
+                [':now' => time()]
+            );
 
-        if (empty($queue)) {
-            return;
-        }
+            foreach ($messages as $msg) {
+                $messageText = $msg['message'] ?? '';
 
-        $remaining = [];
-        $currentTime = time();
+                if (!empty($messageText)) {
+                    $this->sendChatMessage($messageText);
+                    $this->logInfo("发送队列消息 [ID:{$msg['id']}]: $messageText");
 
-        foreach ($queue as $item) {
-            $sendTime = $item['time'] ?? 0;
-
-            if ($currentTime >= $sendTime) {
-                $message = $item['message'] ?? '';
-                $type = $item['type'] ?? 'public';
-                $player = $item['player'] ?? '';
-
-                if (!empty($message)) {
-                    if ($type === 'private' && !empty($player)) {
-                        $this->sendPrivateMessage($player, $message);
-                    } else {
-                        $this->sendChatMessage($message);
-                    }
-                    $this->logInfo("发送队列消息: $message");
+                    $this->db->execute(
+                        "UPDATE message_queues SET is_sent = 1, sent_at = :sentAt WHERE id = :id",
+                        [':sentAt' => time(), ':id' => $msg['id']]
+                    );
                 }
-            } else {
-                $remaining[] = $item;
             }
+        } catch (\Exception $e) {
+            $this->logError("处理消息队列失败: " . $e->getMessage());
         }
-
-        file_put_contents($this->messageQueueFile, json_encode($remaining, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 
     public function queueMessage(string $message, int $delayMinutes = 0, string $type = 'public', string $player = ''): bool
     {
-        if (!file_exists($this->messageQueueFile)) {
-            $queue = [];
-        } else {
-            $content = file_get_contents($this->messageQueueFile);
-            $queue = json_decode($content, true) ?? [];
+        if (!$this->useDatabase) {
+            $this->logWarning("数据库不可用，无法添加消息到队列");
+            return false;
         }
 
-        $queue[] = [
-            'message' => $message,
-            'time' => time() + ($delayMinutes * 60),
-            'type' => $type,
-            'player' => $player
+        try {
+            $scheduledAt = $delayMinutes > 0 ? (time() + ($delayMinutes * 60)) : null;
+
+            $result = $this->db->execute(
+                "INSERT INTO message_queues (message, scheduled_at, created_at) VALUES (:message, :scheduledAt, :createdAt)",
+                [
+                    ':message' => $message,
+                    ':scheduledAt' => $scheduledAt,
+                    ':createdAt' => time()
+                ]
+            );
+
+            if ($result > 0) {
+                $this->logInfo("消息已添加到队列: $message" . ($delayMinutes > 0 ? " (延迟 {$delayMinutes} 分钟)" : ''));
+                return true;
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            $this->logError("添加消息到队列失败: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function getIntervalMinutes(string $scheduleType): int
+    {
+        $intervals = [
+            '15min' => 15,
+            '30min' => 30,
+            'hourly' => 60,
+            '2hour' => 120,
+            '6hour' => 360,
+            '12hour' => 720,
+            'daily' => 1440
         ];
 
-        $dir = dirname($this->messageQueueFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+        return $intervals[$scheduleType] ?? 0;
+    }
 
-        return file_put_contents($this->messageQueueFile, json_encode($queue, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false;
+    private function getStateValue(string $key, $default = 0)
+    {
+        if ($this->stateService) {
+            return $this->stateService->getStateValue('autoResponderState', $key, $default);
+        }
+        return $this->state[$key] ?? $default;
+    }
+
+    private function setStateValue(string $key, $value): bool
+    {
+        if ($this->stateService) {
+            return $this->stateService->setStateValue('autoResponderState', $key, $value);
+        }
+        $this->state[$key] = $value;
+        $this->saveState();
+        return true;
     }
 }

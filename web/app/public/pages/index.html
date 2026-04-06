@@ -1316,22 +1316,19 @@
         } catch (e) { showToast('请求失败: ' + e.message, 'error'); throw e; }
     }
 
-    // === 多服务器管理 ===
-    async function loadServerList() {
-        try {
-            const res = await fetch('../../api.php?action=server_list');
-            const d = await res.json();
-            
-            if (d.success && d.servers) {
-                serverConfigs = {};
-                d.servers.forEach(server => {
-                    serverConfigs[server.id] = server;
-                });
-                updateCurrentServerInfo();
+    // === 单服务器管理 ===
+    function loadServerList() {
+        // 单服务端模式，使用默认配置
+        serverConfigs = {
+            'default': {
+                'id': 'default',
+                'description': '默认服务端',
+                'rcon_port': 27015,
+                'screen_name': 'factorio_server',
+                'running': false
             }
-        } catch (e) {
-            console.error('加载服务器列表失败:', e);
-        }
+        };
+        updateCurrentServerInfo();
     }
 
     async function updateCurrentServerInfo() {
@@ -1367,94 +1364,35 @@
         }
     }
 
-    async function refreshCurrentServerStatus() {
-        try {
-            const res = await fetch(`../../api.php?action=rcon_status&server=${currentServerId}`);
-            const d = await res.json();
-            
-            const statusBadge = document.getElementById('current-server-status');
-            if (statusBadge) {
-                statusBadge.textContent = d.running ? '运行中' : '已停止';
-                statusBadge.className = d.running ? 'badge bg-success' : 'badge bg-secondary';
-            }
-            
-            updateAppStatus(d.running);
-        } catch (e) {
-            console.error('刷新服务器状态失败:', e);
-        }
-    }
-
     function openServerManager() {
         const modal = new bootstrap.Modal(document.getElementById('serverManagerModal'));
         modal.show();
         loadServerManagerList();
     }
 
-    async function loadServerManagerList() {
+    function loadServerManagerList() {
         const list = document.getElementById('server-manager-list');
-        list.innerHTML = '<div class="text-center text-muted py-3">加载中...</div>';
-        
-        try {
-            const res = await fetch('../../api.php?action=server_list');
-            const d = await res.json();
-            
-            if (d.success && d.servers) {
-                if (d.servers.length === 0) {
-                    list.innerHTML = '<div class="text-center text-muted py-3">暂无服务器配置</div>';
-                    return;
-                }
-                
-                const fragment = document.createDocumentFragment();
-                d.servers.forEach(server => {
-                    const safeId = escapeAttr(server.id);
-                    const displayDesc = escapeHtml(server.description || server.id);
-                    const displayId = escapeHtml(server.id);
-                    const displayScreen = escapeHtml(server.screen_name || '--');
-                    const displayPort = escapeHtml(server.rcon_port || '--');
-                    
-                    const item = document.createElement('div');
-                    item.className = 'list-group-item d-flex justify-content-between align-items-center';
-                    item.innerHTML = `
-                        <div>
-                            <div class="fw-bold">${displayDesc}</div>
-                            <small class="text-muted">
-                                ID: ${displayId} | 
-                                Screen: ${displayScreen} | 
-                                RCON: ${displayPort}
-                            </small>
-                        </div>
-                        <div class="d-flex gap-1">
-                            <span class="badge ${server.running ? 'bg-success' : 'bg-secondary'}">
-                                ${server.running ? '运行中' : '已停止'}
-                            </span>
-                            <button class="btn btn-sm btn-outline-primary" onclick="editServerConfig('${safeId}')" title="编辑">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteServerConfig('${safeId}')" title="删除">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>`;
-                    fragment.appendChild(item);
-                });
-                list.innerHTML = '';
-                list.appendChild(fragment);
-            }
-        } catch (e) {
-            list.innerHTML = '<div class="text-center text-danger py-3">加载失败: ' + escapeHtml(e.message) + '</div>';
-        }
+        list.innerHTML = `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-bold">默认服务端</div>
+                    <small class="text-muted">
+                        ID: default | 
+                        Screen: factorio_server | 
+                        RCON: 27015
+                    </small>
+                </div>
+                <div class="d-flex gap-1">
+                    <span class="badge bg-secondary">
+                        单服务端模式
+                    </span>
+                </div>
+            </div>
+        `;
     }
 
     function showAddServerForm() {
-        document.getElementById('add-server-form').classList.remove('d-none');
-        document.getElementById('server-form-title').textContent = '添加新服务器';
-        document.getElementById('edit-server-id').value = '';
-        document.getElementById('new-server-id').value = '';
-        document.getElementById('new-server-id').disabled = false;
-        document.getElementById('new-server-desc').value = '';
-        document.getElementById('new-server-screen').value = '';
-        document.getElementById('new-server-port').value = '';
-        document.getElementById('new-server-password').value = '';
-        document.getElementById('new-server-host').value = '127.0.0.1';
+        showToast('单服务端模式下不支持添加新服务器', 'info');
     }
 
     function hideAddServerForm() {
@@ -1462,107 +1400,15 @@
     }
 
     function editServerConfig(serverId) {
-        const config = serverConfigs[serverId];
-        if (!config) {
-            showToast('找不到服务器配置', 'error');
-            return;
-        }
-        
-        document.getElementById('add-server-form').classList.remove('d-none');
-        document.getElementById('server-form-title').textContent = '编辑服务器: ' + serverId;
-        document.getElementById('edit-server-id').value = serverId;
-        document.getElementById('new-server-id').value = serverId;
-        document.getElementById('new-server-id').disabled = true;
-        document.getElementById('new-server-desc').value = config.description || '';
-        document.getElementById('new-server-screen').value = config.screen_name || '';
-        document.getElementById('new-server-port').value = config.rcon_port || 27015;
-        document.getElementById('new-server-password').value = '';
-        document.getElementById('new-server-host').value = '127.0.0.1';
+        showToast('单服务端模式下不支持编辑服务器配置', 'info');
     }
 
-    async function saveServerConfig() {
-        const editId = document.getElementById('edit-server-id').value;
-        const serverId = document.getElementById('new-server-id').value.trim();
-        const desc = document.getElementById('new-server-desc').value.trim();
-        const screenName = document.getElementById('new-server-screen').value.trim();
-        const port = parseInt(document.getElementById('new-server-port').value) || 27015;
-        const password = document.getElementById('new-server-password').value;
-        const host = document.getElementById('new-server-host').value.trim() || '127.0.0.1';
-        
-        if (!serverId) {
-            showToast('请输入服务器 ID', 'error');
-            return;
-        }
-        
-        if (!screenName) {
-            showToast('请输入 Screen 会话名', 'error');
-            return;
-        }
-        
-        const config = {
-            rcon_enabled: true,
-            rcon_port: port,
-            rcon_password: password || 'factorio_rcon_' + serverId,
-            rcon_host: host,
-            screen_name: screenName,
-            description: desc || serverId
-        };
-        
-        try {
-            const fd = new FormData();
-            fd.append('action', 'save_server_config');
-            fd.append('server_id', serverId);
-            fd.append('config', JSON.stringify(config));
-            
-            const res = await fetch('../../api.php', { method: 'POST', body: fd });
-            const d = await res.json();
-            
-            if (d.success) {
-                showToast('服务器配置已保存', 'success');
-                hideAddServerForm();
-                loadServerManagerList();
-                loadServerList();
-            } else {
-                showToast(d.error || '保存失败', 'error');
-            }
-        } catch (e) {
-            showToast('保存失败: ' + e.message, 'error');
-        }
+    function saveServerConfig() {
+        showToast('单服务端模式下不支持保存服务器配置', 'info');
     }
 
-    async function deleteServerConfig(serverId) {
-        if (serverId === 'default') {
-            showToast('不能删除默认服务器', 'error');
-            return;
-        }
-        
-        if (!confirm(`确定要删除服务器 "${serverId}" 吗？\n\n注意：这只会删除配置，不会停止正在运行的服务器。`)) {
-            return;
-        }
-        
-        try {
-            const fd = new FormData();
-            fd.append('action', 'delete_server_config');
-            fd.append('server_id', serverId);
-            
-            const res = await fetch('../../api.php', { method: 'POST', body: fd });
-            const d = await res.json();
-            
-            if (d.success) {
-                showToast('服务器配置已删除', 'success');
-                loadServerManagerList();
-                loadServerList();
-                
-                if (currentServerId === serverId) {
-                    currentServerId = 'default';
-                    updateCurrentServerInfo();
-                }
-            } else {
-                showToast(d.error || '删除失败', 'error');
-            }
-        } catch (e) {
-            showToast('删除失败: ' + e.message, 'error');
-        }
+    function deleteServerConfig(serverId) {
+        showToast('单服务端模式下不支持删除服务器配置', 'info');
     }
 
     // === 系统探针 ===
@@ -1618,8 +1464,18 @@
                 netTx.innerText = fmtBytes(d.net.tx);
             }
             
-            // 更新应用状态
+            // 更新应用状态 + RCON
             updateAppStatus(d.app_running);
+            const statusBadge = document.getElementById('current-server-status');
+            if (statusBadge) {
+                statusBadge.textContent = d.app_running ? '运行中' : '已停止';
+                statusBadge.className = d.app_running ? 'badge bg-success' : 'badge bg-secondary';
+            }
+            const rconBadge = document.getElementById('current-server-rcon');
+            if (rconBadge) {
+                rconBadge.textContent = 'RCON: ' + (d.rcon_port || '--');
+                rconBadge.className = d.rcon_connected ? 'badge bg-success' : 'badge bg-secondary';
+            }
         } catch (e) { console.error('探针失败', e); }
     }
 
@@ -2772,7 +2628,6 @@ loadPlayerInfoFromStorage();
 // === 统一定时器管理（带页面可见性检测）===
 let pageTimers = {
     probe: null,
-    status: null,
     players: null,
     onlineCheck: null,
     autoResponder: null
@@ -2784,7 +2639,6 @@ function startAllTimers() {
     stopAllTimers();
     
     pageTimers.probe = setInterval(probe, 2000);
-    pageTimers.status = setInterval(refreshCurrentServerStatus, 5000);
     pageTimers.players = setInterval(renderKnownPlayersList, 5000);
     pageTimers.onlineCheck = setInterval(fetchOnlinePlayers, 30000);
     pageTimers.autoResponder = setInterval(checkAutoResponderStatus, 5000);
@@ -2802,7 +2656,6 @@ function handleVisibilityChange() {
     if (isPageVisible) {
         startAllTimers();
         probe();
-        refreshCurrentServerStatus();
         fetchOnlinePlayers();
         checkAutoResponderStatus();
         startLogStreaming();

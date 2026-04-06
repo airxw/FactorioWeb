@@ -8,9 +8,9 @@
     <link rel="stylesheet" href="/lib/vendor/bootstrap/bootstrap-icons.css">
     <style>
         :root {
-            --primary: #3b82f6;
-            --primary-dark: #2563eb;
-            --primary-light: #60a5fa;
+            --primary: #f97316;
+            --primary-dark: #ea580c;
+            --primary-light: #fb923c;
             --success: #10b981;
             --success-light: #34d399;
             --danger: #ef4444;
@@ -19,15 +19,15 @@
             --warning-light: #fbbf24;
             --info: #06b6d4;
             --info-light: #22d3ee;
-            --bg-body: #f3f4f6;
+            --bg-body: #fff7ed;
             --bg-sidebar: #ffffff;
             --bg-card: #ffffff;
             --bg-input: #ffffff;
-            --bg-input-border: #e5e7eb;
-            --border-color: #e5e7eb;
-            --text-primary: #374151;
-            --text-secondary: #6b7280;
-            --text-muted: #9ca3af;
+            --bg-input-border: #fed7aa;
+            --border-color: #fed7aa;
+            --text-primary: #431407;
+            --text-secondary: #9a3412;
+            --text-muted: #c2410c;
             --sidebar-width: 320px;
         }
         
@@ -154,7 +154,7 @@
         
         .form-control:focus, .form-select:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(59,130,246,0.1);
+            box-shadow: 0 0 0 4px rgba(249,115,22,0.15);
         }
         
         .log-container {
@@ -208,8 +208,8 @@
         }
         
         .log-entry.chat {
-            background-color: #e7f3ff;
-            border-left: 4px solid #0066cc;
+            background-color: #fff7ed;
+            border-left: 4px solid #f97316;
         }
         
         .log-entry.login {
@@ -608,51 +608,67 @@
             let timestamp = '';
             let player = null;
             let ip = null;
-            
-            // 提取时间戳
-            const timeMatch = line.match(/^(\d+\.\d+|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+
+            if (!line.includes('[JOIN]') && !line.includes('[LEAVE]') &&
+                !line.includes('[PLAYER-JOIN]') && !line.includes('[PLAYER-LEAVE]') &&
+                !line.includes('[DATA-GET]') && !line.includes('[CHAT]')) {
+                return null;
+            }
+
+            const timeMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
             if (timeMatch) {
                 timestamp = timeMatch[1];
+                message = message.replace(new RegExp('^' + timestamp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '');
+            } else {
+                const gameTimeMatch = line.match(/^(\d+\.\d+)/);
+                if (gameTimeMatch) {
+                    timestamp = '游戏时间:' + gameTimeMatch[1];
+                    message = message.replace(new RegExp('^' + gameTimeMatch[1] + '\\s*'), '');
+                }
             }
-            
-            // 清理重复的时间戳（原始日志可能包含重复的时间戳）
-            if (timestamp) {
-                // 移除开头的第一个时间戳
-                message = message.replace(new RegExp(`^${timestamp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), '');
-                // 移除可能存在的第二个重复时间戳
-                message = message.replace(new RegExp(`^${timestamp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), '');
-            }
-            
-            // 提取IP地址 - 使用更精确的正则表达式匹配IP地址格式
-            let ipMatch = line.match(/IP ADDR:\(\{(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\}\)/);
-            if (!ipMatch) {
-                ipMatch = line.match(/来自\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+的连接请求/);
-            }
-            if (ipMatch) {
-                ip = ipMatch[1];
-            }
-            
-            // 提取玩家名 - 修改正则表达式以匹配实际格式
-            const playerMatch = line.match(/username\s*\(([^)]+)\)/) || 
-                              line.match(/(\w+)\s+上线/) || 
-                              line.match(/\[JOIN\]\s*(\w+)/);
-            if (playerMatch) {
-                player = playerMatch[1];
-            }
-            
-            // 分类日志
-            if (line.includes('[CHAT]')) {
-                type = 'chat';
-            } else if (line.includes('[JOIN]') || line.includes('PlayerJoinGame') || line.includes('ConnectionRequestReplyConfirm') || line.includes('上线')) {
+            message = message.trim();
+
+            if (line.includes('[PLAYER-JOIN]')) {
                 type = 'login';
-            } else if (line.includes('Serving map') || line.includes('saving map') || line.includes('save')) {
-                type = 'save';
-            } else if (line.includes('Error') || line.includes('error') || line.includes('Refusing connection')) {
-                type = 'error';
-            } else if (line.includes('Warning') || line.includes('warning')) {
-                type = 'warning';
+                const joinMatch = line.match(/\[PLAYER-JOIN\]\s*(\S+)/i);
+                if (joinMatch) {
+                    player = joinMatch[1].trim();
+                }
+                message = message.replace(/\[PLAYER-JOIN\]\s*/i, '');
+            } else if (line.includes('[PLAYER-LEAVE]')) {
+                type = 'login';
+                const leaveMatch = line.match(/\[PLAYER-LEAVE\]\s*(\S+)/i);
+                if (leaveMatch) {
+                    player = leaveMatch[1].trim();
+                }
+                message = message.replace(/\[PLAYER-LEAVE\]\s*/i, '');
+            } else if (line.includes('[JOIN]')) {
+                type = 'login';
+                const joinMatch = line.match(/\[JOIN\]\s*(.+?)(?:\s*from\s+|$)/i) || line.match(/\[JOIN\]\s*(.+?)(?:\s*\{|\s*$)/i);
+                if (joinMatch) {
+                    player = joinMatch[1].trim();
+                }
+            } else if (line.includes('[LEAVE]')) {
+                type = 'login';
+                const leaveMatch = line.match(/\[LEAVE\]\s*(.+?)(?:\s*from\s+|$)/i) || line.match(/\[LEAVE\]\s*(.+?)(?:\s*\{|\s*$)/i);
+                if (leaveMatch) {
+                    player = leaveMatch[1].trim();
+                }
+            } else if (line.includes('[DATA-GET]')) {
+                type = 'info';
+                const dataGetMatch = line.match(/\[DATA-GET\]\s*\d+\s*\{[^}]*key:"([^"]+)"[^}]*\}/i);
+                if (dataGetMatch) {
+                    player = dataGetMatch[1].trim();
+                }
+            } else if (line.includes('[CHAT]')) {
+                type = 'chat';
+                const chatMatch = line.match(/\[CHAT\]\s+(\S+):\s*(.+)/i);
+                if (chatMatch) {
+                    player = chatMatch[1].trim();
+                    message = player + ': ' + chatMatch[2].trim();
+                }
             }
-            
+
             return {
                 type,
                 message,
@@ -1025,230 +1041,24 @@
         
         function mergeRelatedLogs(entries) {
             const merged = [];
-            const playerGroups = {};
-            const ipToPlayer = {};
-            
-            // 首先处理所有日志，提取玩家名和IP地址
+
             entries.forEach(entry => {
-                // 提取玩家名
-                let player = entry.player;
-                if (!player) {
-                    const playerMatch = entry.message.match(/username\s*\(([^)]+)\)/) || 
-                                      entry.message.match(/(\w+)\s+上线/) ||
-                                      entry.message.match(/(\w+)\s+下线/) ||
-                                      entry.message.match(/\[JOIN\]\s*(\w+)/) ||
-                                      entry.message.match(/\[LEAVE\]\s*(\w+)/);
-                    if (playerMatch) {
-                        player = playerMatch[1];
-                        entry.player = player;
-                    }
-                }
-                
-                // 提取IP地址
-                let ip = entry.ip;
-                if (!ip) {
-                    let ipMatch = entry.message.match(/IP ADDR:\(\{(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\}\)/);
-                    if (!ipMatch) {
-                        ipMatch = entry.message.match(/来自\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+的连接请求/);
-                    }
-                    if (ipMatch) {
-                        ip = ipMatch[1];
-                        entry.ip = ip;
-                    }
-                }
-            });
-            
-            // 建立玩家名到IP地址的映射（从Refusing connection等日志中提取）
-            entries.forEach(entry => {
-                // 如果日志同时包含玩家名和IP地址，建立双向映射
-                if (entry.player && entry.ip) {
-                    ipToPlayer[entry.ip] = entry.player;
-                }
-            });
-            
-            // 建立玩家名到IP地址的映射（通过时间关联）
-            const playerToIp = {};
-            entries.forEach(entry => {
-                if (entry.player && entry.ip) {
-                    playerToIp[entry.player] = entry.ip;
-                }
-            });
-            
-            // 按时间排序所有日志
-            entries.sort((a, b) => {
-                if (a.timestamp && b.timestamp) {
-                    return a.timestamp.localeCompare(b.timestamp);
-                }
-                return 0;
-            });
-            
-            // 处理所有连接相关日志
-            entries.forEach(entry => {
-                // 过滤掉PlayerJoinGame日志（这类日志不需要显示）
-                if (entry.message.includes('PlayerJoinGame')) {
-                    return; // 跳过这条日志
-                }
-                
-                // 检查是否是连接相关日志
-                if (entry.message.includes('连接请求') || 
-                    entry.message.includes('Refusing connection') || 
-                    entry.message.includes('上线') ||
-                    entry.message.includes('[JOIN]') ||
-                    entry.message.includes('[LEAVE]') ||
-                    entry.message.includes('下线') ||
-                    entry.message.includes('ConnectionRequestReplyConfirm')) {
-                    
-                    // 提取玩家名
-                    let player = entry.player;
-                    if (!player) {
-                        const playerMatch = entry.message.match(/username\s*\(([^)]+)\)/) || 
-                                          entry.message.match(/(\w+)\s+上线/) ||
-                                          entry.message.match(/(\w+)\s+下线/) ||
-                                          entry.message.match(/\[JOIN\]\s*(\w+)/) ||
-                                          entry.message.match(/\[LEAVE\]\s*(\w+)/);
-                        if (playerMatch) {
-                            player = playerMatch[1];
-                            entry.player = player;
-                        }
-                    }
-                    
-                    // 提取IP地址
-                    let ip = entry.ip;
-                    if (!ip) {
-                        let ipMatch = entry.message.match(/IP ADDR:\(\{(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\}\)/);
-                        if (!ipMatch) {
-                            ipMatch = entry.message.match(/来自\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+的连接请求/);
-                        }
-                        if (ipMatch) {
-                            ip = ipMatch[1];
-                            entry.ip = ip;
-                        }
-                    }
-                    
-                    // 如果没有玩家名，尝试从IP映射中获取
-                    if (!player && ip && ipToPlayer[ip]) {
-                        player = ipToPlayer[ip];
-                        entry.player = player;
-                    }
-                    
-                    // 尝试通过玩家名获取IP地址（如果当前日志没有IP但有玩家名）
-                    if (!ip && player && playerToIp[player]) {
-                        ip = playerToIp[player];
-                        entry.ip = ip;
-                    }
-                    
-                    // 即使没有玩家名，也尝试按IP分组
-                    let groupKey = player || ip || 'unknown';
-                    
-                    if (!playerGroups[groupKey]) {
-                        playerGroups[groupKey] = {
-                            player: player,
-                            ip: ip,
-                            messages: [],
-                            timestamps: []
-                        };
-                    }
-                    
-                    // 更新IP地址（如果有）
-                    if (ip) {
-                        playerGroups[groupKey].ip = ip;
-                    }
-                    
-                    // 更新玩家名（如果有）
-                    if (player) {
-                        playerGroups[groupKey].player = player;
-                    }
-                    
-                    // 添加消息和时间戳
-                    playerGroups[groupKey].messages.push(entry.message);
-                    if (entry.timestamp) {
-                        playerGroups[groupKey].timestamps.push(entry.timestamp);
-                    }
-                } else {
-                    // 非连接相关日志直接添加
+                if (!entry || !entry.message) return;
+
+                if (entry.message.includes('[JOIN]') || entry.message.includes('[LEAVE]') ||
+                    entry.message.includes('[PLAYER-JOIN]') || entry.message.includes('[PLAYER-LEAVE]') ||
+                    entry.message.includes('[DATA-GET]') || entry.message.includes('[CHAT]')) {
                     merged.push(entry);
                 }
             });
-            
-            // 处理所有玩家组
-            Object.values(playerGroups).forEach(group => {
-                // 找到最新的时间戳
-                let latestTimestamp = '';
-                if (group.timestamps.length > 0) {
-                    // 按时间戳排序，取最后一个
-                    group.timestamps.sort();
-                    latestTimestamp = group.timestamps[group.timestamps.length - 1];
-                }
-                
-                // 检查是否包含上线或下线信息
-                const hasJoin = group.messages.some(msg => msg.includes('上线') || msg.includes('[JOIN]'));
-                const hasLeave = group.messages.some(msg => msg.includes('下线') || msg.includes('[LEAVE]'));
-                
-                // 只合并有玩家名的组
-                if (group.player) {
-                    if (hasJoin) {
-                        // 生成合并后的上线消息（不包含时间戳，避免重复显示）
-                        let mergedMessage = `${group.player} `;
-                        if (group.ip) {
-                            mergedMessage += `在{${group.ip}}上线`;
-                        } else {
-                            mergedMessage += '上线';
-                        }
-                        
-                        // 创建合并后的日志条目
-                        const mergedEntry = {
-                            type: 'login',
-                            message: mergedMessage,
-                            timestamp: latestTimestamp,
-                            player: group.player,
-                            ip: group.ip,
-                            raw: group.messages.join('\n')
-                        };
-                        
-                        merged.push(mergedEntry);
-                    } else if (hasLeave) {
-                        // 生成合并后的下线消息（不包含时间戳，避免重复显示）
-                        let mergedMessage = `${group.player} 下线`;
-                        
-                        // 创建合并后的日志条目
-                        const mergedEntry = {
-                            type: 'info',
-                            message: mergedMessage,
-                            timestamp: latestTimestamp,
-                            player: group.player,
-                            ip: group.ip,
-                            raw: group.messages.join('\n')
-                        };
-                        
-                        merged.push(mergedEntry);
-                    }
-                } else {
-                    // 没有玩家名的组，将消息直接添加
-                    group.messages.forEach(msg => {
-                        // 过滤掉PlayerJoinGame日志
-                        if (msg.includes('PlayerJoinGame')) {
-                            return;
-                        }
-                        merged.push({
-                            type: 'info',
-                            message: msg,
-                            timestamp: latestTimestamp,
-                            player: null,
-                            ip: group.ip,
-                            raw: msg
-                        });
-                    });
-                }
-            });
-            
-            // 按时间戳排序最终结果
+
             merged.sort((a, b) => {
                 if (a.timestamp && b.timestamp) {
                     return a.timestamp.localeCompare(b.timestamp);
                 }
                 return 0;
             });
-            
+
             return merged;
         }
         

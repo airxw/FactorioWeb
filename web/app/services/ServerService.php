@@ -411,4 +411,98 @@ class ServerService
         
         return $players;
     }
+
+    public function generateMap(array $params): array
+    {
+        $mapName = trim($params['map_name'] ?? '');
+        $seed = $params['seed'] ?? null;
+        $version = $params['version'] ?? '';
+        $mapWidth = (int)($params['map_width'] ?? 0);
+        $mapHeight = (int)($params['map_height'] ?? 0);
+
+        if (empty($mapName)) {
+            return ['error' => '地图名称不能为空'];
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-\x{4e00}-\x{9fa5}]+$/u', $mapName)) {
+            return ['error' => '地图名称只能包含字母、数字、下划线、连字符和中文'];
+        }
+
+        $safeName = preg_replace('/\.zip$/i', '', $mapName) . '.zip';
+
+        $baseDir = dirname(__DIR__, 2);
+        $versionsDir = "$baseDir/../versions";
+
+        if ($version && is_dir("$versionsDir/$version")) {
+            $versionDir = "$versionsDir/$version";
+        } else {
+            $dirs = glob("$versionsDir/*", GLOB_ONLYDIR);
+            if (empty($dirs)) {
+                return ['error' => '未找到任何已安装的服务端版本'];
+            }
+            usort($dirs, fn($a, $b) => version_compare(basename($b), basename($a)));
+            $versionDir = $dirs[0];
+        }
+
+        $possibleBinPaths = [
+            "$versionDir/factorio/bin/x64/factorio",
+            "$versionDir/bin/x64/factorio"
+        ];
+        $bin = null;
+        foreach ($possibleBinPaths as $path) {
+            if (file_exists($path)) {
+                $bin = $path;
+                break;
+            }
+        }
+        if (!$bin) {
+            return ['error' => '未找到 Factorio 可执行文件，请先安装服务端版本'];
+        }
+
+        $saveDir = "$versionDir/saves";
+        if (!is_dir($saveDir)) {
+            mkdir($saveDir, 0755, true);
+        }
+
+        $targetPath = "$saveDir/$safeName";
+        if (file_exists($targetPath)) {
+            return ['error' => "地图存档已存在: $safeName"];
+        }
+
+        $cmdArgs = [$bin, '--create', $safeName];
+        if ($seed !== null && $seed !== '') {
+            $cmdArgs[] = '--seed';
+            $cmdArgs[] = (string)$seed;
+        }
+        if ($mapWidth > 0 && $mapHeight > 0) {
+            $cmdArgs[] = '--map-gen-settings';
+            $cmdArgs[] = escapeshellarg('{"width":' . $mapWidth . ',"height":' . $mapHeight . '}');
+        } elseif ($mapWidth > 0 || $mapHeight > 0) {
+            $w = max(0, $mapWidth);
+            $h = max(0, $mapHeight);
+            $cmdArgs[] = '--map-gen-settings';
+            $cmdArgs[] = escapeshellarg('{"width":' . $w . ',"height":' . $h . '}');
+        }
+
+        $cmdLine = implode(' ', array_map(function ($arg) {
+            return (strpos($arg, ' ') !== false || strpos($arg, "'") !== false)
+                ? escapeshellarg($arg)
+                : escapeshellcmd($arg);
+        }, $cmdArgs));
+
+        $output = shell_exec("cd " . escapeshellarg($saveDir) . " && $cmdLine 2>&1");
+
+        if (file_exists($targetPath)) {
+            return [
+                'message' => "地图生成成功: $safeName",
+                'map_file' => $safeName,
+                'file_size' => round(filesize($targetPath) / 1024 / 1024, 2),
+                'output' => $output
+            ];
+        }
+
+        return [
+            'error' => "地图生成失败，请检查日志",
+            'output' => $output
+        ];
+    }
 }

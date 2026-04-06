@@ -48,6 +48,7 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 ini_set('max_execution_time', 900);
 
+require_once __DIR__ . '/autoload.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/factorioRcon.php';
 require_once __DIR__ . '/secureConfig.php';
@@ -57,6 +58,15 @@ require_once __DIR__ . '/services/RconService.php';
 require_once __DIR__ . '/services/VoteService.php';
 require_once __DIR__ . '/services/ItemService.php';
 require_once __DIR__ . '/services/PlayerService.php';
+require_once __DIR__ . '/services/UserService.php';
+require_once __DIR__ . '/controllers/UserController.php';
+require_once __DIR__ . '/services/ShopService.php';
+require_once __DIR__ . '/controllers/ShopController.php';
+require_once __DIR__ . '/controllers/ItemController.php';
+require_once __DIR__ . '/services/VipService.php';
+require_once __DIR__ . '/services/CartService.php';
+require_once __DIR__ . '/controllers/CartController.php';
+require_once __DIR__ . '/services/ChatService.php';
 
 $rconConfigs = SecureConfig::loadRconConfig();
 
@@ -85,18 +95,7 @@ function getServerConfig($serverId = 'default')
 
 function getServerList()
 {
-    global $rconConfigs;
-    
-    $list = [];
-    foreach ($rconConfigs as $id => $config) {
-        $list[] = [
-            'id' => $id,
-            'description' => $config['description'] ?? $id,
-            'rcon_port' => $config['rcon_port'] ?? 27015,
-            'screen_name' => $config['screen_name'] ?? 'factorio_server',
-        ];
-    }
-    return $list;
+    return [];
 }
 
 function getRconConnection($serverId = 'default')
@@ -182,7 +181,7 @@ function getScreenName($serverId = 'default')
     return $config['screen_name'] ?? 'factorio_server';
 }
 
-$publicActions = ['login', 'check_auth', 'generate_hash', 'update_user', 'update_check', 'log_tail', 'log_history', 'get_copy_progress', 'ip_info', 'server_list', 'system_stats', 'files', 'get_versions', 'online_players', 'phpinfo', 'get_user_info', 'user_list', 'auto_responder_status', 'auto_responder_start', 'auto_responder_stop', 'auto_responder_run_once', 'rcon_status', 'rcon_test'];
+$publicActions = ['login', 'check_auth', 'generate_hash', 'update_user', 'update_check', 'log_tail', 'log_history', 'get_copy_progress', 'ip_info', 'server_list', 'system_stats', 'files', 'get_versions', 'online_players', 'phpinfo', 'get_user_info', 'user_list', 'auto_responder_status', 'auto_responder_start', 'auto_responder_stop', 'auto_responder_run_once', 'rcon_status', 'rcon_test', 'vip_info', 'shop_items', 'my_orders', 'shop_categories', 'daily_order_count', 'get_items', 'search_items', 'item_categories', 'items_with_status', 'set_item_status', 'batch_item_status', 'sync_items', 'register', 'user_info', 'pending_orders', 'cart_get', 'cart_add', 'cart_update', 'cart_remove', 'cart_clear', 'generate_binding_code', 'check_binding_status', 'validate_order'];
 $action = $_REQUEST['action'] ?? '';
 
 if (!in_array($action, $publicActions)) {
@@ -217,6 +216,7 @@ foreach (glob("$versionsDir/*", GLOB_ONLYDIR) as $d) {
         }
     }
 }
+usort($availableVersions, fn($a, $b) => version_compare($b, $a));
 
 if (empty($availableVersions)) {
     // 对于登录等公共操作，允许继续执行
@@ -333,9 +333,7 @@ function copyWithProgress($src, $dst, &$progress, $progressFile = null) {
     return true;
 }
 
-// 只有在直接访问 API 时才执行 switch 语句
-if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
-    switch ($action) {
+switch ($action) {
         case 'login':               handleLogin(); break;
         case 'logout':              handleLogout(); break;
         case 'check_auth':          handleCheckAuth(); break;
@@ -363,9 +361,12 @@ if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
         case 'mod_portal_search':   handleModPortalSearch(); break;
         case 'mod_portal_install':  handleModPortalInstall(); break;
         case 'player_lists':        handlePlayerLists(); break;
+        case 'known_players':       handleKnownPlayers(); break;
         case 'update_check':        handleUpdateCheck(); break;
         case 'update_install':      handleUpdateInstall(); break;
         case 'get_versions':        handleGetVersions(); break;
+        case 'generate_map':        handleGenerateMap(); break;
+        case 'upload_map':          handleUploadMap(); break;
         case 'list_templates':      handleListTemplates(); break;
         case 'apply_template':      handleApplyTemplate(); break;
         case 'ip_info':             handleIpInfo(); break;
@@ -391,17 +392,164 @@ if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
         case 'update_user_info':  handleUpdateUser(); break;
         case 'reset_password':    handleResetPassword(); break;
         case 'security_check':    handleSecurityCheck(); break;
+        case 'generate_binding_code': handleGenerateBindingCode(); break;
+        case 'check_binding_status': handleCheckBindingStatus(); break;
         case 'security_fix':      handleSecurityFix(); break;
         case 'generate_rcon_password': handleGenerateRconPassword(); break;
         case 'auto_responder_status': handleAutoResponderStatus(); break;
         case 'auto_responder_start': handleAutoResponderStart(); break;
         case 'auto_responder_stop': handleAutoResponderStop(); break;
         case 'auto_responder_run_once': handleAutoResponderRunOnce(); break;
+        case 'vip_info':
+            require_once __DIR__ . '/controllers/VipController.php';
+            (new \App\Controllers\VipController())->handleVipInfo();
+            break;
+        case 'set_vip':
+            require_once __DIR__ . '/controllers/VipController.php';
+            (new \App\Controllers\VipController())->handleSetVip();
+            break;
+        case 'set_vip_expiry':
+            require_once __DIR__ . '/controllers/VipController.php';
+            (new \App\Controllers\VipController())->handleSetVipExpiry();
+            break;
+        case 'vip_list':
+            require_once __DIR__ . '/controllers/VipController.php';
+            (new \App\Controllers\VipController())->handleVipList();
+            break;
+        case 'get_vip_config':
+            require_once __DIR__ . '/controllers/VipController.php';
+            (new \App\Controllers\VipController())->handleGetVipConfig();
+            break;
+        case 'update_vip_config':
+            require_once __DIR__ . '/controllers/VipController.php';
+            (new \App\Controllers\VipController())->handleUpdateVipConfig();
+            break;
+        case 'shop_items':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleShopItems();
+            break;
+        case 'shop_add_item':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleAddShopItem();
+            break;
+        case 'shop_update_item':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleUpdateShopItem();
+            break;
+        case 'get_items':
+            require_once __DIR__ . '/controllers/ItemController.php';
+            \App\Controllers\ItemController::handleGetItems();
+            break;
+        case 'search_items':
+            require_once __DIR__ . '/controllers/ItemController.php';
+            \App\Controllers\ItemController::handleSearchItems();
+            break;
+        case 'item_categories':
+            require_once __DIR__ . '/controllers/ItemController.php';
+            \App\Controllers\ItemController::handleGetCategories();
+            break;
+        case 'items_with_status':
+            require_once __DIR__ . '/controllers/ItemController.php';
+            \App\Controllers\ItemController::handleGetItemsWithStatus();
+            break;
+        case 'set_item_status':
+            require_once __DIR__ . '/controllers/ItemController.php';
+            \App\Controllers\ItemController::handleSetItemStatus();
+            break;
+        case 'batch_item_status':
+            require_once __DIR__ . '/controllers/ItemController.php';
+            \App\Controllers\ItemController::handleBatchItemStatus();
+            break;
+        case 'sync_items':
+            require_once __DIR__ . '/controllers/ItemController.php';
+            \App\Controllers\ItemController::handleSyncItems();
+            break;
+        case 'create_order':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleCreateOrder();
+            break;
+        case 'batch_create_orders':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleBatchCreateOrders();
+            break;
+        case 'my_orders':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleMyOrders();
+            break;
+        case 'deliver_order':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleDeliverOrder();
+            break;
+        case 'cancel_order':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleCancelOrder();
+            break;
+        case 'shop_categories':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleGetCategories();
+            break;
+        case 'daily_order_count':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleDailyOrderCount();
+            break;
+        case 'pending_orders':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handlePendingOrders();
+            break;
+        case 'validate_order':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleValidateOrder();
+            break;
+        case 'deliver_by_number':
+            require_once __DIR__ . '/controllers/ShopController.php';
+            \App\Controllers\ShopController::handleDeliverByNumber();
+            break;
+        case 'cart_get':
+            require_once __DIR__ . '/controllers/CartController.php';
+            \App\Controllers\CartController::handleGetCart();
+            break;
+        case 'cart_add':
+            require_once __DIR__ . '/controllers/CartController.php';
+            \App\Controllers\CartController::handleAddToCart();
+            break;
+        case 'cart_update':
+            require_once __DIR__ . '/controllers/CartController.php';
+            \App\Controllers\CartController::handleUpdateCart();
+            break;
+        case 'cart_remove':
+            require_once __DIR__ . '/controllers/CartController.php';
+            \App\Controllers\CartController::handleRemoveFromCart();
+            break;
+        case 'cart_clear':
+            require_once __DIR__ . '/controllers/CartController.php';
+            \App\Controllers\CartController::handleClearCart();
+            break;
+        case 'register':
+            require_once __DIR__ . '/controllers/UserController.php';
+            \App\Controllers\UserController::handleRegister();
+            break;
+        case 'update_password':
+            require_once __DIR__ . '/controllers/UserController.php';
+            \App\Controllers\UserController::handleUpdatePassword();
+            break;
+        case 'user_info':
+            require_once __DIR__ . '/controllers/UserController.php';
+            \App\Controllers\UserController::handleUserInfo();
+            break;
+        case 'config_list':         handleConfigList(); break;
+        case 'config_get':          handleConfigGet(); break;
+        case 'config_save':         handleConfigSave(); break;
+        case 'config_delete':       handleConfigDelete(); break;
+        case 'get_secrets':         handleGetSecrets(); break;
+        case 'save_player_events':  handleSavePlayerEvents(); break;
+        case 'get_player_events':   handleGetPlayerEvents(); break;
+        case 'get_chat_settings':   handleGetChatSettings(); break;
+        case 'add_trigger_response': handleAddTriggerResponse(); break;
+        case 'delete_trigger_response': handleDeleteTriggerResponse(); break;
         default:
             echo json_encode(['error' => 'Unknown action']);
             exit;
     }
-}
 
 function handleLogin() {
     $username = $_POST['username'] ?? '';
@@ -561,6 +709,12 @@ function handleStart() {
     ];
     file_put_contents($GLOBALS['logDir'] . '/runtimeConfig.json', json_encode($runtimeConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     
+    // 先启动自动响应守护进程
+    startAutoResponder();
+
+    // 启动 WebSocket 日志服务
+    startWebSocket();
+    
     $cmd = sprintf(
         "screen -dmS %s bash -c \"cd %s && %s --start-server %s --server-settings %s --mod-directory %s %s %s >> %s 2>&1\"",
         escapeshellarg($screenName),
@@ -588,7 +742,7 @@ function handleStart() {
         'status' => true,
         'timestamp' => time()
     ];
-    
+
     echo json_encode([
         'message' => '服务器启动成功',
         'server_id' => $serverId,
@@ -801,37 +955,66 @@ function handleListFiles() {
     $ver = $_GET['version'] ?? '';
     
     if ($type === 'config') {
-        // 只返回游戏配置文件
         $dir = $GLOBALS['configDir'];
         $pattern = "*.json";
+    } elseif (!empty($ver) && is_dir("{$GLOBALS['versionsDir']}/$ver/saves")) {
+        $dir = "{$GLOBALS['versionsDir']}/$ver/saves";
+        $pattern = "*.zip";
     } else {
-        // 使用统一的存档目录
-        $dir = $GLOBALS['saveDir'];
+        $allDirs = [];
+        foreach (glob("{$GLOBALS['versionsDir']}/*", GLOB_ONLYDIR) as $vDir) {
+            $sDir = "$vDir/saves";
+            if (is_dir($sDir)) { $allDirs[] = $sDir; }
+        }
+        usort($allDirs, fn($a, $b) => version_compare(basename(dirname($b)), basename(dirname($a))));
+        $dir = $allDirs;
         $pattern = "*.zip";
     }
     
     $files = [];
     $currentSave = '';
     
-    // Get current save for this version
-    if ($type !== 'config' && is_dir($dir)) {
-        $stateFile = "$dir/.state.json";
-        if (file_exists($stateFile)) {
-            $state = json_decode(file_get_contents($stateFile), true);
-            $currentSave = $state['current_save'] ?? '';
+    if (is_array($dir)) {
+        $foundFiles = [];
+        $seen = [];
+        foreach ($dir as $d) {
+            if (!is_dir($d)) continue;
+            $sf = glob("$d/$pattern");
+            if ($sf === false) continue;
+            foreach ($sf as $f) {
+                $bn = basename($f);
+                if (str_ends_with($bn, ".tmp.zip")) continue;
+                if (isset($seen[$bn])) {
+                    if (filemtime($f) > filemtime($seen[$bn])) { $seen[$bn] = $f; }
+                } else { $seen[$bn] = $f; }
+            }
         }
-    }
-    
-    if (!is_dir($dir)) {
-        mkdir($dir, 0755, true);
-        echo json_encode(['files' => [], 'error' => '目录不存在，已自动创建: ' . $dir, 'current_save' => $currentSave, 'version' => $ver]);
-        return;
-    }
-    
-    $foundFiles = glob("$dir/$pattern");
-    if ($foundFiles === false) {
-        echo json_encode(['files' => [], 'error' => '读取目录失败', 'current_save' => $currentSave, 'version' => $ver]);
-        return;
+        $foundFiles = array_values($seen);
+        foreach (glob("{$GLOBALS['versionsDir']}/*", GLOB_ONLYDIR) as $vDir) {
+            $sd = "$vDir/saves";
+            if (is_dir($sd) && file_exists("$sd/.state.json")) {
+                $st = json_decode(file_get_contents("$sd/.state.json"), true);
+                if (!empty($st['current_save'])) { $currentSave = $st['current_save']; break; }
+            }
+        }
+    } else {
+        if ($type !== 'config' && is_dir($dir)) {
+            $stateFile = "$dir/.state.json";
+            if (file_exists($stateFile)) {
+                $state = json_decode(file_get_contents($stateFile), true);
+                $currentSave = $state['current_save'] ?? '';
+            }
+        }
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+            echo json_encode(['files' => [], 'error' => '目录不存在，已自动创建: ' . $dir, 'current_save' => $currentSave, 'version' => $ver]);
+            return;
+        }
+        $foundFiles = glob("$dir/$pattern");
+        if ($foundFiles === false) {
+            echo json_encode(['files' => [], 'error' => '读取目录失败', 'current_save' => $currentSave, 'version' => $ver]);
+            return;
+        }
     }
     
     foreach ($foundFiles as $f) {
@@ -845,33 +1028,42 @@ function handleListFiles() {
             $files[] = [
                 'filename' => $bn,
                 'display'  => $bn,
-                'size'     => round(filesize($f) / 1024, 2),
+                'size'     => filesize($f),
                 'time'     => filemtime($f)
             ];
             continue;
         }
         
+        $isAuto = false;
+        $isManual = false;
+
         if ($bn === 'current.zip') {
             $display = "📁 手动存档 (current.zip)";
             $isCurrent = true;
-        }
-        
-        if (preg_match('/^(.+?)_autosave(\d+)\.zip$/', $bn, $m)) {
+            $isManual = true;
+        } elseif (preg_match('/^(.+?)_autosave(\d+)\.zip$/', $bn, $m)) {
             $display = "🔄 自动存档 #{$m[2]} ← {$m[1]}";
+            $isAuto = true;
         } elseif (preg_match('/^_autosave(\d+)\.zip$/', $bn, $m)) {
             $display = "🔄 自动存档 #{$m[1]}";
+            $isAuto = true;
+        } elseif (preg_match('/_backup_\d+\.zip$/', $bn)) {
+            $display = "💾 手动备份 " . preg_replace('/_backup_\d+\.zip$/', '', $bn);
+            $isManual = true;
         }
-        
+
         if ($isCurrent) {
             $display = "✅ " . $display . " (当前使用中)";
         }
-        
+
         $files[] = [
             'filename' => $bn,
             'display'  => $display,
-            'size'     => round(filesize($f) / 1024 / 1024, 2),
+            'size'     => filesize($f),
             'time'     => filemtime($f),
-            'is_current' => $isCurrent
+            'is_current' => $isCurrent,
+            'is_auto' => $isAuto,
+            'is_manual' => $isManual
         ];
     }
     
@@ -1024,6 +1216,12 @@ function handleStop() {
         unlink($runtimeConfigFile);
     }
     
+    // 停止自动响应守护进程
+    stopAutoResponder();
+
+    // 停止 WebSocket 日志服务
+    stopWebSocket();
+
     echo json_encode(['message' => '服务器正在关闭', 'server_id' => $serverId]);
 }
 
@@ -1381,6 +1579,49 @@ function handlePlayerLists() {
     ]);
 }
 
+function handleKnownPlayers() {
+    $logFile = getLogFilePath();
+    
+    if (!file_exists($logFile)) {
+        echo json_encode(['success' => true, 'players' => []]);
+        exit;
+    }
+    
+    $content = file_get_contents($logFile);
+    if ($content === false) {
+        echo json_encode(['success' => true, 'players' => []]);
+        exit;
+    }
+    
+    $players = [];
+    $lines = explode("\n", $content);
+    
+    foreach ($lines as $line) {
+        if (preg_match('/\[PLAYER-JOIN\]\s*(\S+)/', $line, $m)) {
+            $playerName = trim($m[1]);
+            $players[$playerName] = true;
+        } elseif (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\s(\S+)\s+joined the game/i', $line, $m)) {
+            $playerName = trim($m[2]);
+            $players[$playerName] = true;
+        } elseif (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\[JOIN\]\s*(\S+)/i', $line, $m)) {
+            $playerName = trim($m[2]);
+            $players[$playerName] = true;
+        } elseif (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?JOINING GAME.*?peer\s+(\w+)/i', $line, $m)) {
+            $players[$m[2]] = true;
+        }
+    }
+    
+    $playerList = array_keys($players);
+    sort($playerList);
+    
+    echo json_encode([
+        'success' => true,
+        'players' => $playerList,
+        'count' => count($playerList)
+    ]);
+    exit;
+}
+
 function handleUpdateCheck() {
     // 调试输出
     error_log('handleUpdateCheck called');
@@ -1401,8 +1642,21 @@ function handleUpdateCheck() {
     $data = json_decode($json, true) ?: [];
     
     $currentVersion = 'unknown';
-    if (file_exists($GLOBALS['binPath'])) {
-        $output = shell_exec($GLOBALS['binPath'] . ' --version 2>&1');
+    $allVersions = [];
+    foreach (glob("{$GLOBALS['versionsDir']}/*", GLOB_ONLYDIR) as $d) {
+        $v = basename($d);
+        $paths = ["$d/factorio/bin/x64/factorio", "$d/bin/x64/factorio"];
+        foreach ($paths as $bp) {
+            if (file_exists($bp)) {
+                $allVersions[$v] = $bp;
+                break;
+            }
+        }
+    }
+    if (!empty($allVersions)) {
+        uksort($allVersions, 'version_compare');
+        $latestBin = end($allVersions);
+        $output = shell_exec($latestBin . ' --version 2>&1');
         if ($output && preg_match('/Version:?\s*([\d.]+)/i', $output, $matches)) {
             $currentVersion = $matches[1];
         }
@@ -1438,6 +1692,43 @@ function handleGetVersions() {
     echo json_encode(['versions'=>$list]);
 }
 
+function handleGenerateMap() {
+    require_once __DIR__ . '/controllers/ServerController.php';
+    $controller = new \App\Controllers\ServerController();
+    $params = [
+        'map_name' => $_POST['map_name'] ?? '',
+        'seed' => $_POST['seed'] ?? null,
+        'version' => $_POST['version'] ?? '',
+        'map_width' => (int)($_POST['map_width'] ?? 0),
+        'map_height' => (int)($_POST['map_height'] ?? 0),
+    ];
+    $controller->generateMap($params);
+}
+
+function handleUploadMap() {
+    if (empty($_FILES['map_file'])) {
+        echo json_encode(['error' => '无文件上传']);
+        exit;
+    }
+    $file = $_FILES['map_file'];
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if ($ext !== 'zip') {
+        echo json_encode(['error' => '只能上传 .zip 格式的地图存档文件']);
+        exit;
+    }
+    $rawName = $file['name'];
+    $safeName = str_replace(array('/', '\\'), '', $rawName);
+    $safeName = str_replace('..', '', $safeName);
+    $saveDir = $GLOBALS['saveDir'];
+    if (!is_dir($saveDir)) mkdir($saveDir, 0755, true);
+    if (move_uploaded_file($file['tmp_name'], "$saveDir/$safeName")) {
+        echo json_encode(['message' => "地图上传成功: $safeName"]);
+    } else {
+        echo json_encode(['error' => '上传失败，请检查目录权限']);
+        exit;
+    }
+}
+
 function handleUpdateInstall() {
     $v = $_POST['version'] ?? '';
     if (!$v || is_dir("{$GLOBALS['versionsDir']}/$v")) {
@@ -1466,16 +1757,24 @@ function handleUpdateInstall() {
 }
 
 function getLogFilePath($configName = null) {
+    $runtimeConfigFile = $GLOBALS['baseDir'] . '/logs/runtimeConfig.json';
+    if (file_exists($runtimeConfigFile)) {
+        $runtimeConfig = json_decode(file_get_contents($runtimeConfigFile), true);
+        if (!empty($runtimeConfig['config_file'])) {
+            $configName = preg_replace('/\.json$/i', '', $runtimeConfig['config_file']);
+        }
+    }
+
     if ($configName === null) {
         $configName = $_GET['config'] ?? $_POST['config'] ?? '';
     }
-    
-    if (!empty($configName)) {
+
+    if (!empty($configName) && $configName !== 'default') {
         $configName = preg_replace('/\.json$/i', '', $configName);
         $logFile = $GLOBALS['baseDir'] . "/logs/factorio-{$configName}.log";
         return $logFile;
     }
-    
+
     $logsDir = $GLOBALS['baseDir'] . '/logs';
     if (is_dir($logsDir)) {
         $logFiles = glob("$logsDir/factorio-*.log");
@@ -1486,7 +1785,7 @@ function getLogFilePath($configName = null) {
             return $logFiles[0];
         }
     }
-    
+
     return $GLOBALS['logFile'];
 }
 
@@ -1581,113 +1880,65 @@ function handleSaveServerResponse() {
     $type = $_POST['type'] ?? '';
     $keyword = $_POST['keyword'] ?? '';
     $value = $_POST['value'] ?? '';
-    
-    if (empty($keyword)) {
-        echo json_encode(['success' => false, 'message' => '关键词不能为空']);
-        exit;
-    }
-    
+
     if (empty($type)) {
         echo json_encode(['success' => false, 'message' => '响应类型不能为空']);
         exit;
     }
-    
-    $settingsFile = dirname(__DIR__) . '/config/state/chatSettings.json';
-    $settings = [];
-    
-    if (file_exists($settingsFile)) {
-        $settings = json_decode(file_get_contents($settingsFile), true);
+
+    if (empty($keyword)) {
+        echo json_encode(['success' => false, 'message' => '关键词不能为空']);
+        exit;
     }
-    
-    // 初始化serverResponses数组
-    if (!isset($settings['serverResponses'])) {
-        $settings['serverResponses'] = [];
-    }
-    
-    // 检查是否已存在相同的关键词
-    foreach ($settings['serverResponses'] as $index => $response) {
-        if ($response['keyword'] === $keyword) {
-            // 更新现有的响应
-            $settings['serverResponses'][$index] = [
-                'type' => $type,
-                'keyword' => $keyword,
-                'value' => $value
-            ];
-            file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-            echo json_encode(['success' => true, 'message' => '服务器响应设置已更新']);
-            exit;
+
+    try {
+        $chatService = new \App\Services\ChatService();
+        $result = $chatService->saveServerResponse($type, $keyword, $value);
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => '服务器响应设置已保存']);
+        } else {
+            echo json_encode(['success' => false, 'message' => '保存失败']);
         }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => '保存失败: ' . $e->getMessage()]);
     }
-    
-    // 添加新的响应
-    $settings['serverResponses'][] = [
-        'type' => $type,
-        'keyword' => $keyword,
-        'value' => $value
-    ];
-    
-    file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    echo json_encode(['success' => true, 'message' => '服务器响应设置已添加']);
     exit;
 }
 
 function handleRemoveServerResponse() {
     $keyword = $_POST['keyword'] ?? '';
     $type = $_POST['type'] ?? '';
-    
+
     if (empty($keyword)) {
         echo json_encode(['success' => false, 'message' => '关键词不能为空']);
         exit;
     }
-    
-    $settingsFile = dirname(__DIR__) . '/config/state/chatSettings.json';
-    
-    if (!file_exists($settingsFile)) {
-        echo json_encode(['success' => false, 'message' => '配置文件不存在']);
-        exit;
-    }
-    
-    $settings = json_decode(file_get_contents($settingsFile), true);
-    
-    if (!isset($settings['serverResponses'])) {
-        echo json_encode(['success' => false, 'message' => '没有找到服务器响应设置']);
-        exit;
-    }
-    
-    // 查找并删除匹配的响应
-    $found = false;
-    foreach ($settings['serverResponses'] as $index => $response) {
-        if ($response['keyword'] === $keyword && $response['type'] === $type) {
-            array_splice($settings['serverResponses'], $index, 1);
-            $found = true;
-            break;
+
+    try {
+        $chatService = new \App\Services\ChatService();
+        $result = $chatService->removeServerResponse($keyword, $type);
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => '服务器响应设置已删除']);
+        } else {
+            echo json_encode(['success' => false, 'message' => '删除失败或记录不存在']);
         }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => '删除失败: ' . $e->getMessage()]);
     }
-    
-    if (!$found) {
-        echo json_encode(['success' => false, 'message' => '没有找到匹配的服务器响应设置']);
-        exit;
-    }
-    
-    file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    echo json_encode(['success' => true, 'message' => '服务器响应设置已删除']);
     exit;
 }
 
 function handleGetServerResponses() {
-    $settingsFile = dirname(__DIR__) . '/config/state/chatSettings.json';
-    $settings = [];
-    
-    if (file_exists($settingsFile)) {
-        $settings = json_decode(file_get_contents($settingsFile), true);
+    try {
+        $chatService = new \App\Services\ChatService();
+        $responses = $chatService->getServerResponses();
+        echo json_encode([
+            'success' => true,
+            'responses' => $responses
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => '获取失败: ' . $e->getMessage()]);
     }
-    
-    $responses = $settings['serverResponses'] ?? [];
-    
-    echo json_encode([
-        'success' => true,
-        'responses' => $responses
-    ]);
     exit;
 }
 
@@ -2016,14 +2267,6 @@ function handleSystemStats()
         $diskPercent = round(($diskTotalSpace - $diskFree) / $diskTotalSpace * 100);
     }
     
-    $serverList = getServerList();
-    $runningCount = 0;
-    foreach ($serverList as $server) {
-        if (isServerRunning($server['id'])) {
-            $runningCount++;
-        }
-    }
-    
     echo json_encode([
         'success' => true,
         'cpu_percent' => $cpuPercent,
@@ -2034,8 +2277,6 @@ function handleSystemStats()
         'disk_used' => $diskUsed,
         'disk_total' => $diskTotal,
         'total_players' => getOnlinePlayerCount(),
-        'server_count' => count($serverList),
-        'running_count' => $runningCount,
         'uptime' => trim(shell_exec('uptime -p 2>/dev/null || echo "--"')),
         'load_avg' => $loadAvg,
     ]);
@@ -2059,16 +2300,26 @@ function getOnlinePlayerCount()
     $lines = explode("\n", $content);
     
     foreach ($lines as $line) {
-        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?(\w+) joined the game/i', $line, $m)) {
+        if (preg_match('/\[PLAYER-JOIN\]\s*(\S+)/', $line, $m)) {
+            $playerName = trim($m[1]);
+            $players[$playerName] = 'joined';
+        } elseif (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\s(\S+)\s+joined the game/i', $line, $m)) {
+            $playerName = trim($m[2]);
+            $players[$playerName] = 'joined';
+        }
+        if (preg_match('/\[PLAYER-LEAVE\]\s*(\S+)/', $line, $m)) {
+            $playerName = trim($m[1]);
+            if (!empty($playerName)) {
+                $players[$playerName] = 'left';
+            }
+        } elseif (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\s(\S+)\s+left the game/i', $line, $m)) {
+            $playerName = trim($m[2]);
+            $players[$playerName] = 'left';
+        }
+        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?JOINING GAME.*?peer\s+(\w+)/i', $line, $m)) {
             $players[$m[2]] = 'joined';
         }
-        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?(\w+) left the game/i', $line, $m)) {
-            $players[$m[2]] = 'left';
-        }
-        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?JOINING GAME.*?(\w+)/i', $line, $m)) {
-            $players[$m[2]] = 'joined';
-        }
-        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?LEAVING GAME.*?(\w+)/i', $line, $m)) {
+        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?LEAVING GAME.*?peer\s+(\w+)/i', $line, $m)) {
             $players[$m[2]] = 'left';
         }
     }
@@ -2146,11 +2397,21 @@ function handleOnlinePlayers()
     $lines = explode("\n", $content);
     
     foreach ($lines as $line) {
-        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?(\w+) joined the game/i', $line, $m)) {
-            $players[$m[2]] = ['status' => 'online', 'last_action' => $m[1], 'action' => 'joined'];
+        if (preg_match('/\[PLAYER-JOIN\]\s*(\S+)/', $line, $m)) {
+            $playerName = trim($m[1]);
+            $players[$playerName] = ['status' => 'online', 'last_action' => date('Y-m-d H:i:s'), 'action' => 'joined'];
+        } elseif (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\s(\S+)\s+joined the game/i', $line, $m)) {
+            $playerName = trim($m[2]);
+            $players[$playerName] = ['status' => 'online', 'last_action' => $m[1], 'action' => 'joined'];
         }
-        if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?(\w+) left the game/i', $line, $m)) {
-            $players[$m[2]] = ['status' => 'offline', 'last_action' => $m[1], 'action' => 'left'];
+        if (preg_match('/\[PLAYER-LEAVE\]\s*(\S+)/', $line, $m)) {
+            $playerName = trim($m[1]);
+            if (!empty($playerName) && $playerName !== '' ) {
+                $players[$playerName] = ['status' => 'offline', 'last_action' => date('Y-m-d H:i:s'), 'action' => 'left'];
+            }
+        } elseif (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\s(\S+)\s+left the game/i', $line, $m)) {
+            $playerName = trim($m[2]);
+            $players[$playerName] = ['status' => 'offline', 'last_action' => $m[1], 'action' => 'left'];
         }
         if (preg_match('/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?JOINING GAME.*?peer\s+(\w+)/i', $line, $m)) {
             $players[$m[2]] = ['status' => 'online', 'last_action' => $m[1], 'action' => 'joined'];
@@ -2196,58 +2457,45 @@ function handleChangePassword()
 {
     $newPassword = $_POST['new_password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
-    
+
     if (empty($newPassword)) {
         echo json_encode(['success' => false, 'error' => '请输入新密码']);
         exit;
     }
-    
+
     if (strlen($newPassword) < 6) {
         echo json_encode(['success' => false, 'error' => '密码长度至少6位']);
         exit;
     }
-    
+
     if ($newPassword !== $confirmPassword) {
         echo json_encode(['success' => false, 'error' => '两次密码输入不一致']);
         exit;
     }
-    
-    $configFile = dirname(__DIR__) . '/config/auth.php';
-    $config = file_exists($configFile) ? require $configFile : [
-        'users' => [],
-        'session_expiry' => 86400
-    ];
-    
-    $currentUser = $_SESSION['user_id'] ?? 'admin';
-    
-    if (!isset($config['users'][$currentUser])) {
-        $config['users'][$currentUser] = [
-            'role' => 'admin',
-            'name' => '管理员'
-        ];
-    }
-    
-    $config['users'][$currentUser]['password'] = password_hash($newPassword, PASSWORD_DEFAULT);
-    
-    $configContent = "<?php\n\nreturn [\n";
-    $configContent .= "    'users' => [\n";
-    foreach ($config['users'] as $username => $userData) {
-        $configContent .= "        '$username' => [\n";
-        $configContent .= "            'password' => '" . addslashes($userData['password']) . "',\n";
-        $configContent .= "            'role' => '" . ($userData['role'] ?? 'user') . "',\n";
-        $configContent .= "            'name' => '" . addslashes($userData['name'] ?? $username) . "',\n";
-        $configContent .= "        ],\n";
-    }
-    $configContent .= "    ],\n";
-    $configContent .= "    'session_expiry' => " . ($config['session_expiry'] ?? 86400) . "\n";
-    $configContent .= "];\n";
-    
-    if (file_put_contents($configFile, $configContent) === false) {
-        echo json_encode(['success' => false, 'error' => '无法保存配置文件']);
+
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        echo json_encode(['success' => false, 'error' => '未登录或会话无效']);
         exit;
     }
-    
-    echo json_encode(['success' => true, 'message' => '密码修改成功']);
+
+    try {
+        $db = \App\Core\Database::getInstance();
+        $db->initialize();
+
+        $user = $db->query('SELECT password_hash FROM users WHERE id = :id', [':id' => $userId]);
+        if (empty($user)) {
+            echo json_encode(['success' => false, 'error' => '用户不存在']);
+            exit;
+        }
+
+        $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+        $db->execute('UPDATE users SET password_hash = :hash, updated_at = :ua WHERE id = :id', [':hash' => $newHash, ':ua' => time(), ':id' => $userId]);
+
+        echo json_encode(['success' => true, 'message' => '密码修改成功']);
+    } catch (\Exception $e) {
+        echo json_encode(['success' => false, 'error' => '密码修改失败: ' . $e->getMessage()]);
+    }
     exit;
 }
 
@@ -2269,19 +2517,23 @@ function handleGetUserInfo()
 
 function handleUserList()
 {
-    $configFile = dirname(__DIR__) . '/config/auth.php';
-    $config = file_exists($configFile) ? require $configFile : ['users' => []];
-    
+    $db = \App\Core\Database::getInstance();
+    $db->initialize();
+
+    $rows = $db->query('SELECT id, username, name, game_id, role, vip_level, password_hash, created_at FROM users ORDER BY id');
     $users = [];
-    foreach ($config['users'] ?? [] as $username => $userData) {
+    foreach ($rows as $row) {
         $users[] = [
-            'username' => $username,
-            'name' => $userData['name'] ?? $username,
-            'role' => $userData['role'] ?? 'user',
-            'has_password' => !empty($userData['password'])
+            'id' => (int)$row['id'],
+            'username' => $row['username'],
+            'name' => $row['name'] ?? $row['username'],
+            'game_id' => $row['game_id'] ?? '',
+            'role' => $row['role'] ?? 'user',
+            'vip_level' => (int)($row['vip_level'] ?? 0),
+            'has_password' => !empty($row['password_hash'])
         ];
     }
-    
+
     echo json_encode([
         'success' => true,
         'users' => $users
@@ -2294,46 +2546,42 @@ function handleAddUser()
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
     $name = trim($_POST['name'] ?? '');
+    $gameId = trim($_POST['game_id'] ?? '');
     $role = $_POST['role'] ?? 'user';
-    
+
     if (empty($username)) {
         echo json_encode(['success' => false, 'error' => '请输入用户名']);
         exit;
     }
-    
+
     if (!preg_match('/^[a-zA-Z0-9_]{3,20}$/', $username)) {
         echo json_encode(['success' => false, 'error' => '用户名需要3-20位字母、数字或下划线']);
         exit;
     }
-    
+
     if (strlen($password) < 6) {
         echo json_encode(['success' => false, 'error' => '密码长度至少6位']);
         exit;
     }
-    
+
     if (!in_array($role, ['admin', 'user'])) {
         $role = 'user';
     }
-    
-    $configFile = dirname(__DIR__) . '/config/auth.php';
-    $config = file_exists($configFile) ? require $configFile : ['users' => [], 'session_expiry' => 86400];
-    
-    if (isset($config['users'][$username])) {
+
+    $db = \App\Core\Database::getInstance();
+    $db->initialize();
+
+    $existing = $db->query('SELECT id FROM users WHERE username = ?', [$username]);
+    if (!empty($existing)) {
         echo json_encode(['success' => false, 'error' => '用户名已存在']);
         exit;
     }
-    
-    $config['users'][$username] = [
-        'password' => password_hash($password, PASSWORD_DEFAULT),
-        'role' => $role,
-        'name' => $name ?: $username
-    ];
-    
-    if (!saveConfig($configFile, $config)) {
-        echo json_encode(['success' => false, 'error' => '保存配置失败']);
-        exit;
-    }
-    
+
+    $db->execute(
+        'INSERT INTO users (username, password_hash, role, name, game_id, vip_level, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)',
+        [$username, password_hash($password, PASSWORD_DEFAULT), $role, $name ?: $username, $gameId, time(), time()]
+    );
+
     echo json_encode(['success' => true, 'message' => '用户添加成功']);
     exit;
 }
@@ -2341,34 +2589,27 @@ function handleAddUser()
 function handleDeleteUser()
 {
     $username = $_POST['username'] ?? '';
-    $currentUser = $_SESSION['user_id'] ?? '';
-    
+    $currentUser = $_SESSION['username'] ?? '';
+
     if (empty($username)) {
         echo json_encode(['success' => false, 'error' => '请指定用户']);
         exit;
     }
-    
+
     if ($username === $currentUser) {
         echo json_encode(['success' => false, 'error' => '不能删除当前登录用户']);
         exit;
     }
-    
-    $configFile = dirname(__DIR__) . '/config/auth.php';
-    $config = file_exists($configFile) ? require $configFile : ['users' => []];
-    
-    if (!isset($config['users'][$username])) {
+
+    $db = \App\Core\Database::getInstance();
+    $db->initialize();
+
+    $result = $db->execute('DELETE FROM users WHERE username = ?', [$username]);
+    if ($result > 0) {
+        echo json_encode(['success' => true, 'message' => '用户已删除']);
+    } else {
         echo json_encode(['success' => false, 'error' => '用户不存在']);
-        exit;
     }
-    
-    unset($config['users'][$username]);
-    
-    if (!saveConfig($configFile, $config)) {
-        echo json_encode(['success' => false, 'error' => '保存配置失败']);
-        exit;
-    }
-    
-    echo json_encode(['success' => true, 'message' => '用户已删除']);
     exit;
 }
 
@@ -2377,38 +2618,37 @@ function handleUpdateUser()
     $username = $_POST['username'] ?? '';
     $name = trim($_POST['name'] ?? '');
     $role = $_POST['role'] ?? '';
+    $gameId = $_POST['game_id'] ?? '';
     $newPassword = $_POST['new_password'] ?? '';
-    
+
     if (empty($username)) {
         echo json_encode(['success' => false, 'error' => '请指定用户']);
         exit;
     }
-    
-    $configFile = dirname(__DIR__) . '/config/auth.php';
-    $config = file_exists($configFile) ? require $configFile : ['users' => []];
-    
-    if (!isset($config['users'][$username])) {
+
+    $db = \App\Core\Database::getInstance();
+    $db->initialize();
+
+    $existing = $db->query('SELECT id FROM users WHERE username = ?', [$username]);
+    if (empty($existing)) {
         echo json_encode(['success' => false, 'error' => '用户不存在']);
         exit;
     }
-    
+
     if (!empty($name)) {
-        $config['users'][$username]['name'] = $name;
+        $db->execute('UPDATE users SET name = ?, updated_at = ? WHERE username = ?', [$name, time(), $username]);
     }
-    
+
     if (in_array($role, ['admin', 'user'])) {
-        $config['users'][$username]['role'] = $role;
+        $db->execute('UPDATE users SET role = ?, updated_at = ? WHERE username = ?', [$role, time(), $username]);
     }
-    
+
+    $db->execute('UPDATE users SET game_id = ?, updated_at = ? WHERE username = ?', [$gameId, time(), $username]);
+
     if (!empty($newPassword) && strlen($newPassword) >= 6) {
-        $config['users'][$username]['password'] = password_hash($newPassword, PASSWORD_DEFAULT);
+        $db->execute('UPDATE users SET password_hash = ?, updated_at = ? WHERE username = ?', [password_hash($newPassword, PASSWORD_DEFAULT), time(), $username]);
     }
-    
-    if (!saveConfig($configFile, $config)) {
-        echo json_encode(['success' => false, 'error' => '保存配置失败']);
-        exit;
-    }
-    
+
     echo json_encode(['success' => true, 'message' => '用户信息已更新']);
     exit;
 }
@@ -2417,52 +2657,119 @@ function handleResetPassword()
 {
     $username = $_POST['username'] ?? '';
     $newPassword = $_POST['new_password'] ?? '';
-    
+
     if (empty($username)) {
         echo json_encode(['success' => false, 'error' => '请指定用户']);
         exit;
     }
-    
+
     if (strlen($newPassword) < 6) {
         echo json_encode(['success' => false, 'error' => '密码长度至少6位']);
         exit;
     }
-    
-    $configFile = dirname(__DIR__) . '/config/auth.php';
-    $config = file_exists($configFile) ? require $configFile : ['users' => []];
-    
-    if (!isset($config['users'][$username])) {
+
+    $db = \App\Core\Database::getInstance();
+    $db->initialize();
+
+    $result = $db->execute('UPDATE users SET password_hash = ?, updated_at = ? WHERE username = ?', [password_hash($newPassword, PASSWORD_DEFAULT), time(), $username]);
+
+    if ($result > 0) {
+        echo json_encode(['success' => true, 'message' => '密码已重置']);
+    } else {
         echo json_encode(['success' => false, 'error' => '用户不存在']);
-        exit;
     }
-    
-    $config['users'][$username]['password'] = password_hash($newPassword, PASSWORD_DEFAULT);
-    
-    if (!saveConfig($configFile, $config)) {
-        echo json_encode(['success' => false, 'error' => '保存配置失败']);
-        exit;
-    }
-    
-    echo json_encode(['success' => true, 'message' => '密码已重置']);
     exit;
 }
 
-function saveConfig($configFile, $config)
+function handleGenerateBindingCode()
 {
-    $configContent = "<?php\n\nreturn [\n";
-    $configContent .= "    'users' => [\n";
-    foreach ($config['users'] ?? [] as $username => $userData) {
-        $configContent .= "        '$username' => [\n";
-        $configContent .= "            'password' => '" . addslashes($userData['password'] ?? '') . "',\n";
-        $configContent .= "            'role' => '" . ($userData['role'] ?? 'user') . "',\n";
-        $configContent .= "            'name' => '" . addslashes($userData['name'] ?? $username) . "',\n";
-        $configContent .= "        ],\n";
+    $authService = new \App\Services\AuthService();
+    if (!$authService->isLoggedIn()) {
+        echo json_encode(['success' => false, 'error' => '请先登录']);
+        exit;
     }
-    $configContent .= "    ],\n";
-    $configContent .= "    'session_expiry' => " . ($config['session_expiry'] ?? 86400) . "\n";
-    $configContent .= "];\n";
-    
-    return file_put_contents($configFile, $configContent) !== false;
+
+    $currentUser = $authService->getCurrentUser();
+    $userId = (int)($currentUser['id'] ?? 0);
+
+    if (!is_numeric($currentUser['id'] ?? null)) {
+        echo json_encode(['success' => false, 'error' => '当前用户不支持此功能']);
+        exit;
+    }
+
+    if ($userId <= 0) {
+        echo json_encode(['success' => false, 'error' => '用户未登录']);
+        exit;
+    }
+
+    $db = \App\Core\Database::getInstance();
+    $db->initialize();
+
+    $user = $db->query('SELECT id, game_id, binding_code FROM users WHERE id = ?', [$userId]);
+    if (empty($user)) {
+        echo json_encode(['success' => false, 'error' => '用户不存在']);
+        exit;
+    }
+
+    $user = $user[0];
+
+    if (!empty($user['game_id'])) {
+        echo json_encode(['success' => false, 'error' => '该账号已绑定游戏ID，无需重复绑定']);
+        exit;
+    }
+
+    $bindingCode = strtoupper(substr(md5($userId . time() . uniqid()), 0, 8));
+
+    $db->execute('UPDATE users SET binding_code = ?, updated_at = ? WHERE id = ?', [$bindingCode, time(), $userId]);
+
+    echo json_encode([
+        'success' => true,
+        'binding_code' => $bindingCode,
+        'message' => '绑定码生成成功，请在游戏中发送绑定码进行认证'
+    ]);
+    exit;
+}
+
+function handleCheckBindingStatus()
+{
+    $authService = new \App\Services\AuthService();
+    if (!$authService->isLoggedIn()) {
+        echo json_encode(['success' => false, 'error' => '请先登录']);
+        exit;
+    }
+
+    $currentUser = $authService->getCurrentUser();
+    $userId = (int)($currentUser['id'] ?? 0);
+
+    if (!is_numeric($currentUser['id'] ?? null)) {
+        echo json_encode(['success' => false, 'error' => '当前用户不支持此功能']);
+        exit;
+    }
+
+    if ($userId <= 0) {
+        echo json_encode(['success' => false, 'error' => '用户未登录']);
+        exit;
+    }
+
+    $db = \App\Core\Database::getInstance();
+    $db->initialize();
+
+    $user = $db->query('SELECT id, username, game_id, binding_code, vip_level FROM users WHERE id = ?', [$userId]);
+    if (empty($user)) {
+        echo json_encode(['success' => false, 'error' => '用户不存在']);
+        exit;
+    }
+
+    $user = $user[0];
+
+    echo json_encode([
+        'success' => true,
+        'game_id' => $user['game_id'] ?? '',
+        'binding_code' => $user['binding_code'] ?? '',
+        'vip_level' => (int)$user['vip_level'],
+        'is_bound' => !empty($user['game_id'])
+    ]);
+    exit;
 }
 
 function handleLogHistory() {
@@ -2855,10 +3162,20 @@ function handleAutoResponderStart() {
             @unlink($pidFile);
         }
         
+        $logFile = dirname(__DIR__) . '/logs/autoResponderDaemon.log';
+        
+        // 确保日志目录存在
+        $logDir = dirname($logFile);
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+            chown($logDir, 'www');
+            chgrp($logDir, 'www');
+        }
+        
         $cmd = sprintf(
-            'nohup php %s start >> %s/logs/autoResponderDaemon.log 2>&1 &',
+            'nohup /usr/bin/php %s start >> %s 2>&1 &',
             escapeshellarg($daemonScript),
-            escapeshellarg(dirname(__DIR__))
+            escapeshellarg($logFile)
         );
         exec($cmd);
         
@@ -2935,22 +3252,375 @@ function handleAutoResponderStop() {
 }
 
 function handleAutoResponderRunOnce() {
-    $daemonScript = __DIR__ . '/autoResponderDaemon.php';
+    $message = $_POST['message'] ?? '';
+    if (empty($message)) {
+        echo json_encode(['success' => false, 'message' => '请提供消息内容']);
+        exit;
+    }
     
-    $output = shell_exec(sprintf(
-        'php %s run 2>&1',
-        escapeshellarg($daemonScript)
-    ));
+    // 使用 Factorio 正确的命令格式发送消息
+    $screenName = 'factorio_server';
+    $command = '/c game.print("' . str_replace('"', '\\"', $message) . '")';
+    $escapedCommand = str_replace('"', '\\"', $command);
+    $fullCommand = sprintf('screen -S %s -p 0 -X stuff "%s\n"', $screenName, $escapedCommand);
+    shell_exec($fullCommand);
     
     echo json_encode([
         'success' => true,
-        'message' => '自动响应已执行一次',
-        'output' => $output
+        'message' => '消息已发送',
+        'sent_message' => $message,
+        'command' => $command
     ]);
     exit;
 }
 
+function startAutoResponder() {
+    $pidFile = dirname(__DIR__) . '/run/autoResponder.pid';
+    $logFile = dirname(__DIR__) . '/logs/autoResponderDaemon.log';
+    
+    // 确保日志目录存在
+    $logDir = dirname($logFile);
+    if (!is_dir($logDir)) {
+        mkdir($logDir, 0755, true);
+        chown($logDir, 'www');
+        chgrp($logDir, 'www');
+    }
+    
+    // 确保运行目录存在
+    $runDir = dirname($pidFile);
+    if (!is_dir($runDir)) {
+        mkdir($runDir, 0755, true);
+        chown($runDir, 'www');
+        chgrp($runDir, 'www');
+    }
+    
+    // 检查是否已有守护进程在运行
+    if (file_exists($pidFile)) {
+        $pid = (int)file_get_contents($pidFile);
+        if ($pid > 0 && posix_kill($pid, 0)) {
+            return;
+        }
+        @unlink($pidFile);
+    }
+    
+    $daemonScript = __DIR__ . '/autoResponderDaemon.php';
+    
+    // 使用完整路径执行
+    $cmd = sprintf(
+        'nohup /usr/bin/php %s start >> %s 2>&1 &',
+        escapeshellarg($daemonScript),
+        escapeshellarg($logFile)
+    );
+    
+    // 执行命令
+    exec($cmd);
+    
+    // 等待守护进程启动
+    usleep(1000000); // 增加等待时间
+    
+    // 检查守护进程是否启动成功
+    if (file_exists($pidFile)) {
+        $pid = (int)file_get_contents($pidFile);
+        if ($pid > 0 && posix_kill($pid, 0)) {
+            error_log('自动响应守护进程启动成功，PID: ' . $pid);
+        } else {
+            error_log('自动响应守护进程启动失败，PID 文件存在但进程不存在');
+        }
+    } else {
+        error_log('自动响应守护进程启动失败，PID 文件未创建');
+    }
+}
+
+function stopAutoResponder() {
+    $pidFile = dirname(__DIR__) . '/run/autoResponder.pid';
+
+    if (!file_exists($pidFile)) {
+        return;
+    }
+
+    $pid = (int)file_get_contents($pidFile);
+
+    if ($pid > 0 && posix_kill($pid, 0)) {
+        posix_kill($pid, SIGTERM);
+        usleep(500000);
+
+        if (posix_kill($pid, 0)) {
+            posix_kill($pid, SIGKILL);
+        }
+    }
+
+    @unlink($pidFile);
+}
+
+function startWebSocket() {
+    $pidFile = dirname(__DIR__) . '/run/websocket.pid';
+
+    if (file_exists($pidFile)) {
+        $pid = (int)file_get_contents($pidFile);
+        if ($pid > 0 && posix_kill($pid, 0)) {
+            return;
+        }
+        @unlink($pidFile);
+    }
+
+    $wsScript = __DIR__ . '/websocket_server.php';
+    $logFile = dirname(__DIR__) . '/logs/websocket.log';
+    $cmd = sprintf(
+        'nohup php %s >> %s 2>&1 & echo $!',
+        escapeshellarg($wsScript),
+        escapeshellarg($logFile)
+    );
+    $output = trim(exec($cmd));
+    if (is_numeric($output) && $output > 0) {
+        file_put_contents($pidFile, $output);
+    }
+}
+
+function stopWebSocket() {
+    $pidFile = dirname(__DIR__) . '/run/websocket.pid';
+
+    if (!file_exists($pidFile)) {
+        return;
+    }
+
+    $pid = (int)file_get_contents($pidFile);
+
+    if ($pid > 0 && posix_kill($pid, 0)) {
+        posix_kill($pid, SIGTERM);
+        usleep(500000);
+
+        if (posix_kill($pid, 0)) {
+            posix_kill($pid, SIGKILL);
+        }
+    }
+
+    @unlink($pidFile);
+}
+
 // 刷新输出缓冲，确保所有JSON响应被正确发送
 ob_end_flush();
+
+// ===== 配置文件管理 API =====
+function getServerConfigDir() {
+    $baseDir = dirname(__DIR__);
+    $dir = $baseDir . '/config/serverConfigs';
+    if (!is_dir($dir)) { mkdir($dir, 0755, true); }
+    return $dir;
+}
+
+function handleConfigList() {
+    $dir = getServerConfigDir();
+    $files = [];
+    if (is_dir($dir)) {
+        foreach (glob($dir . '/*.json') as $file) {
+            $files[] = basename($file, '.json');
+        }
+    }
+    sort($files, SORT_NATURAL | SORT_FLAG_CASE);
+    echo json_encode(['success' => true, 'files' => $files]);
+    exit;
+}
+
+function handleConfigGet() {
+    $filename = trim($_GET['filename'] ?? '');
+    if (empty($filename)) {
+        echo json_encode(['success' => false, 'error' => '文件名不能为空']);
+        exit;
+    }
+    $filename = preg_replace('/\.json$/i', '', $filename);
+    $filepath = getServerConfigDir() . '/' . $filename . '.json';
+    if (!file_exists($filepath)) {
+        echo json_encode(['success' => false, 'error' => '配置文件不存在']);
+        exit;
+    }
+    $config = json_decode(file_get_contents($filepath), true);
+    if (!$config) {
+        echo json_encode(['success' => false, 'error' => '配置文件格式无效']);
+        exit;
+    }
+    echo json_encode(['success' => true, 'config' => $config]);
+    exit;
+}
+
+function handleConfigSave() {
+    $filename = trim($_POST['filename'] ?? '');
+    $configJson = $_POST['config'] ?? '';
+    if (empty($filename)) {
+        echo json_encode(['success' => false, 'error' => '文件名不能为空']);
+        exit;
+    }
+    $filename = preg_replace('/\.json$/i', '', $filename);
+    if (!preg_match('/^[\w\x{4e00}-\x{9fa5}-]+$/u', $filename)) {
+        echo json_encode(['success' => false, 'error' => '文件名只能包含字母、数字、汉字、下划线或中划线']);
+        exit;
+    }
+    if (mb_strlen($filename, 'UTF-8') > 20) {
+        echo json_encode(['success' => false, 'error' => '文件名不能超过 20 个字符']);
+        exit;
+    }
+    $config = json_decode($configJson, true);
+    if (!$config) {
+        echo json_encode(['success' => false, 'error' => '配置格式无效']);
+        exit;
+    }
+    $filepath = getServerConfigDir() . '/' . $filename . '.json';
+    if (file_put_contents($filepath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) === false) {
+        echo json_encode(['success' => false, 'error' => '保存失败，请检查目录权限']);
+        exit;
+    }
+    echo json_encode(['success' => true, 'message' => '配置已保存']);
+    exit;
+}
+
+function handleConfigDelete() {
+    $filename = trim($_POST['filename'] ?? '');
+    if (empty($filename)) {
+        echo json_encode(['success' => false, 'error' => '文件名不能为空']);
+        exit;
+    }
+    $filename = preg_replace('/\.json$/i', '', $filename);
+    $filepath = getServerConfigDir() . '/' . $filename . '.json';
+    if (!file_exists($filepath)) {
+        echo json_encode(['success' => false, 'error' => '配置文件不存在']);
+        exit;
+    }
+    if (!unlink($filepath)) {
+        echo json_encode(['success' => false, 'error' => '删除失败']);
+        exit;
+    }
+    echo json_encode(['success' => true, 'message' => '配置文件已删除']);
+    exit;
+}
+
+function handleGetSecrets() {
+    $config = loadConfig();
+    $secrets = $config['factorio_secrets'] ?? ['username' => '', 'password' => '', 'token' => ''];
+    echo json_encode(['success' => true, 'secrets' => $secrets]);
+    exit;
+}
+
+// ===== WAL Checkpoint 定期清理（概率触发，约 1% 的请求）=====
+// 防止 -wal 文件无限增长，定期将 WAL 内容合并回主数据库
+if (rand(1, 100) === 1) {
+    try {
+        $db = \App\Core\Database::getInstance();
+        $pdo = $db->getConnection();
+
+        // TRUNCATE 模式：将 WAL 文件内容合并回主数据库并清空 WAL
+        $pdo->exec("PRAGMA wal_checkpoint(TRUNCATE)");
+
+        // 可选：记录日志（调试时开启）
+        // error_log("[DB] WAL checkpoint executed at " . date('Y-m-d H:i:s'));
+    } catch (\Exception $e) {
+        // 静默失败，不影响业务逻辑
+        // error_log("[DB] WAL checkpoint failed: " . $e->getMessage());
+    }
+}
+// ===== WAL Checkpoint 清理结束 =====
+
+function handleSavePlayerEvents() {
+    try {
+        $playerEvents = json_decode($_POST['player_events'] ?? '[]', true);
+        if (!$playerEvents) {
+            echo json_encode(['success' => false, 'message' => '无效的数据']);
+            return;
+        }
+
+        require_once __DIR__ . '/services/ChatService.php';
+        $chatService = new \App\Services\ChatService();
+
+        $settings = [
+            'playerEvents' => $playerEvents
+        ];
+
+        $result = $chatService->updateSettings($settings);
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => '玩家事件设置已保存']);
+        } else {
+            echo json_encode(['success' => false, 'message' => '保存失败']);
+        }
+    } catch (\Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+}
+
+function handleGetPlayerEvents() {
+    try {
+        require_once __DIR__ . '/services/ChatService.php';
+        $chatService = new \App\Services\ChatService();
+        $settings = $chatService->getSettings();
+
+        echo json_encode([
+            'success' => true,
+            'playerEvents' => $settings['playerEvents']
+        ]);
+    } catch (\Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+}
+
+function handleGetChatSettings() {
+    try {
+        require_once __DIR__ . '/services/ChatService.php';
+        $chatService = new \App\Services\ChatService();
+        $settings = $chatService->getSettings();
+        echo json_encode(['success' => true, 'data' => $settings]);
+    } catch (\Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+}
+
+function handleAddTriggerResponse() {
+    $keyword = $_POST['keyword'] ?? '';
+    $response = $_POST['response'] ?? '';
+    
+    if (empty($keyword) || empty($response)) {
+        echo json_encode(['success' => false, 'message' => '关键词和响应内容不能为空']);
+        exit;
+    }
+    
+    try {
+        require_once __DIR__ . '/services/ChatService.php';
+        $chatService = new \App\Services\ChatService();
+        
+        $result = $chatService->addTriggerResponse([
+            'keyword' => $keyword,
+            'response' => $response,
+            'isEnabled' => true
+        ]);
+        
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => '关键词回复已添加']);
+        } else {
+            echo json_encode(['success' => false, 'message' => '添加失败']);
+        }
+    } catch (\Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+}
+
+function handleDeleteTriggerResponse() {
+    $id = $_POST['id'] ?? '';
+    
+    if (empty($id)) {
+        echo json_encode(['success' => false, 'message' => '请指定要删除的关键词回复ID']);
+        exit;
+    }
+    
+    try {
+        require_once __DIR__ . '/services/ChatService.php';
+        $chatService = new \App\Services\ChatService();
+        
+        $result = $chatService->deleteTriggerResponse($id);
+        
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => '关键词回复已删除']);
+        } else {
+            echo json_encode(['success' => false, 'message' => '删除失败']);
+        }
+    } catch (\Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+}
 
 

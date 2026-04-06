@@ -13,8 +13,8 @@ class DaemonController
 
     public function __construct()
     {
-        $basePath = dirname(__DIR__, 2);
-        $this->pidFile = $basePath . '/auto_responder.pid';
+        $basePath = dirname(__DIR__);
+        $this->pidFile = $basePath . '/run/autoResponder.pid';
         $this->startScript = $basePath . '/scripts/start_daemon.sh';
         $this->stopScript = $basePath . '/scripts/stop_daemon.sh';
         $this->daemonScript = $basePath . '/auto_responder_daemon.php';

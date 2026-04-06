@@ -6,18 +6,17 @@
     <title>Factorio Server Pro - 登录</title>
     <link rel="stylesheet" href="/lib/vendor/bootstrap/css/bootstrap.min.css">
     <link rel="stylesheet" href="/lib/vendor/bootstrap/bootstrap-icons.css">
-    <link id="skin-style" rel="stylesheet" href="">
     <style>
         :root {
-            --primary: #3b82f6;
-            --primary-dark: #2563eb;
-            --bg-gradient: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
+            --primary: #f97316;
+            --primary-dark: #ea580c;
+            --bg-gradient: linear-gradient(135deg, #431407 0%, #2d1808 100%);
             --login-card-bg: rgba(255, 255, 255, 0.95);
-            --text-primary: #1f2937;
-            --text-secondary: #6b7280;
-            --input-border: #e5e7eb;
+            --text-primary: #431407;
+            --text-secondary: #9a3412;
+            --input-border: #fed7aa;
             --input-bg: #ffffff;
-            --input-label: #9ca3af;
+            --input-label: #c2410c;
         }
         
         * {
@@ -100,7 +99,7 @@
         
         .form-floating > .form-control:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
         }
         
         .form-floating > label {
@@ -122,7 +121,7 @@
         .btn-login:hover {
             background: var(--primary-dark);
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+            box-shadow: 0 10px 20px rgba(249, 115, 22, 0.3);
         }
         
         .btn-login:disabled {
@@ -160,8 +159,8 @@
         <div class="login-card">
             <div class="login-header">
                 <i class="bi bi-hdd-rack-fill"></i>
-                <h1>Factorio Server Pro</h1>
-                <p>Factorio管理面板</p>
+                <h1>异星工厂服务器面板</h1>
+                <p>星际探索联盟理事会「IEAC」</p>
             </div>
             
             <div id="alert-container"></div>
@@ -184,22 +183,8 @@
             </form>
             
             <div class="footer-text">
-                <p class="mb-2"><i class="bi bi-shield-lock"></i> 不那么安全登录 · 版本 v1.4</p>
-                <div class="d-flex justify-content-center gap-2 mb-2 flex-wrap">
-                    <button class="btn btn-sm btn-link p-0 text-decoration-none" onclick="setSkin('default')" title="默认风格">
-                        <i class="bi bi-sun"></i> 默认
-                    </button>
-                    <span class="text-muted">|</span>
-                    <button class="btn btn-sm btn-link p-0 text-decoration-none" onclick="setSkin('industrial')" title="现代风格">
-                        <i class="bi bi-palette"></i> 现代
-                    </button>
-                    <span class="text-muted">|</span>
-                    <button class="btn btn-sm btn-link p-0 text-decoration-none" onclick="setSkin('factorio')" title="Factorio风格">
-                        <i class="bi bi-gear"></i> Factorio
-                    </button>
-                </div>
-                <a href="password-tool.html" class="text-decoration-none">
-                    <i class="bi bi-key me-1"></i>设置/修改密码
+                <a href="register.html" class="text-decoration-none" style="font-size: 18px;">
+                    <i class="bi bi-person-plus me-1"></i>还没有账号？立即注册
                 </a>
             </div>
         </div>
@@ -208,28 +193,6 @@
     <script src="/app/public/assets/js/jquery-3.6.0.min.js"></script>
     <script src="/lib/vendor/bootstrap/js/bootstrap.bundle.js"></script>
     <script>
-        function setSkin(skin) {
-            const skinLink = document.getElementById('skin-style');
-            if (skin === 'industrial') {
-                skinLink.href = '/app/public/assets/skins/industrial.css';
-                localStorage.setItem('factorio-skin', 'industrial');
-            } else if (skin === 'factorio') {
-                skinLink.href = '/app/public/assets/skins/factorio.css';
-                localStorage.setItem('factorio-skin', 'factorio');
-            } else {
-                skinLink.href = '';
-                localStorage.setItem('factorio-skin', 'default');
-            }
-        }
-
-        function loadSkin() {
-            const savedSkin = localStorage.getItem('factorio-skin');
-            if (savedSkin) {
-                setSkin(savedSkin);
-            }
-        }
-
-        loadSkin();
         function showAlert(message, type = 'danger') {
             const container = document.getElementById('alert-container');
             const alert = document.createElement('div');

@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物品库管理 - Factorio Server Pro</title>
+    <link rel="icon" type="image/x-icon" href="/app/public/favicon.ico">
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/lib/vendor/bootstrap/bootstrap-icons.css">
+    <link rel="stylesheet" href="/app/public/assets/skins/default.css">
+    <link rel="stylesheet" href="/app/public/assets/css/main.css">
+    <style>
+        :root { --sidebar-width: 220px; }
+        body { background: var(--bg-body); min-height: 100vh; }
+        .items-page { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        .item-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .item-card:hover { border-color: var(--primary-color); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .item-code { font-family: monospace; color: var(--text-muted); font-size: 0.85rem; }
+        .item-name { font-weight: 600; color: var(--text-primary); }
+        .category-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; }
+        .stats-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; text-align: center; }
+        .stats-card .number { font-size: 2rem; font-weight: 700; color: var(--primary-color); }
+        .stats-card .label { color: var(--text-muted); font-size: 0.85rem; }
+        .search-box { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+        .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+        .filter-tabs .nav-link { padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; }
+        .filter-tabs .nav-link.active { background: var(--primary-color); color: white; }
+        .sync-info { font-size: 0.8rem; color: var(--text-muted); }
+        .loading-spinner { display: inline-block; width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
+    </style>
+</head>
+<body>
+    <div class="items-page">
+        <div class="page-header d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4><i class="bi bi-box-seam me-2 text-primary"></i>物品库管理</h4>
+                <p class="text-muted small mb-0">管理 Factorio 游戏物品数据，支持远程同步</p>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" onclick="syncItems()" id="btnSync">
+                    <i class="bi bi-arrow-repeat me-1"></i>同步数据
+                </button>
+                <a href="dashboard.html" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>返回
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="number" id="totalItems">0</div>
+                    <div class="label">物品总数</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="number" id="categoryCount">0</div>
+                    <div class="label">分类数量</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="number" id="lastSync">-</div>
+                    <div class="label">最后同步</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="number"><i class="bi bi-cloud-check text-success"></i></div>
+                    <div class="label">数据状态</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-box">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted">搜索物品</label>
+                    <input type="text" id="searchInput" class="form-control" placeholder="输入物品名称或代码..." oninput="debounceSearch()">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">数据来源</label>
+                    <select id="sourceSelect" class="form-select" onchange="loadItemsData()">
+                        <option value="local">本地物品库</option>
+                        <option value="remote">远程同步数据</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">排序方式</label>
+                    <select id="sortSelect" class="form-select" onchange="renderItemsList()">
+                        <option value="name">按名称排序</option>
+                        <option value="code">按代码排序</option>
+                        <option value="category">按分类排序</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" onclick="clearFilters()">
+                        <i class="bi bi-x-circle me-1"></i>清除筛选
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="filter-tabs" id="categoryTabs">
+            <button class="nav-link active" onclick="filterByCategory('', this)">全部</button>
+            <button class="nav-link" onclick="filterByCategory('logistics', this)">物流</button>
+            <button class="nav-link" onclick="filterByCategory('production', this)">生产</button>
+            <button class="nav-link" onclick="filterByCategory('combat', this)">战斗</button>
+            <button class="nav-link" onclick="filterByCategory('intermediate', this)">中间产品</button>
+            <button class="nav-link" onclick="filterByCategory('space-age', this)">太空时代</button>
+            <button class="nav-link" onclick="filterByCategory('equipment', this)">装备模块</button>
+            <button class="nav-link" onclick="filterByCategory('other', this)">其他</button>
+        </div>
+
+        <div id="itemsGrid" class="row g-2">
+            <div class="col-12 text-center text-muted py-5">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <p>正在加载物品数据...</p>
+            </div>
+        </div>
+
+        <div id="paginationInfo" class="d-flex justify-content-between align-items-center mt-3">
+            <span class="text-muted small" id="pageInfo">显示 0 - 0 条，共 0 条</span>
+            <div class="btn-group" id="pageButtons"></div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="/lib/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/lib/vendor/bootstrap/bootstrap-icons.js"></script>
+    <script>
+        const ITEMS_DATA = { categories: {}, total: 0, categoryList: [] };
+        const CATEGORY_LABELS = {
+            logistics: '物流', production: '生产', combat: '战斗',
+            intermediate: '中间产品', 'space-age': '太空时代', equipment: '装备模块', other: '其他'
+        };
+        const ITEMS_PER_PAGE = 50;
+        let currentPage = 1;
+        let currentFilter = { category: '', search: '', sort: 'name' };
+        let searchTimeout = null;
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        async function fetchJson(url) {
+            const r = await fetch(url, { cache: 'no-cache' });
+            if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+            return await r.json();
+        }
+
+        async function loadItemsData() {
+            const source = document.getElementById('sourceSelect').value;
+            const grid = document.getElementById('itemsGrid');
+
+            grid.innerHTML = '<div class="col-12 text-center text-muted py-5"><div class="spinner-border text-primary mb-3" role="status"></div><p>正在加载物品数据...</p></div>';
+
+            try {
+                let data;
+                if (source === 'local') {
+                    data = await fetchJson('../../api.php?action=get_items');
+                } else {
+                    data = await fetchJson('https://gitee.com/sive/factorioitem/raw/main/items.json');
+                    if (data && !data.success) {
+                        data = { success: true, categories: data, total: Object.values(data).reduce((s, c) => s + Object.keys(c).length, 0) };
+                    }
+                }
+
+                const itemsData = data.data || data;
+
+                if (itemsData && itemsData.categories) {
+                    ITEMS_DATA.categories = itemsData.categories;
+                    ITEMS_DATA.total = itemsData.total || Object.values(itemsData.categories).reduce((s, c) => s + Object.keys(c).length, 0);
+                    ITEMS_DATA.categoryList = itemsData.category_list || [];
+
+                    updateStats();
+                    currentPage = 1;
+                    renderItemsList();
+                } else {
+                    grid.innerHTML = '<div class="col-12 text-center text-danger py-5"><i class="bi bi-exclamation-triangle fs-1 d-block mb-3"></i><p>加载失败：数据格式错误</p></div>';
+                }
+            } catch (error) {
+                console.error('加载物品数据失败:', error);
+                grid.innerHTML = '<div class="col-12 text-center text-danger py-5"><i class="bi bi-exclamation-triangle fs-1 d-block mb-3"></i><p>加载失败: ' + escapeHtml(error.message) + '</p><button class="btn btn-outline-primary btn-sm mt-2" onclick="loadItemsData()"><i class="bi bi-arrow-repeat me-1"></i>重试</button></div>';
+            }
+        }
+
+        function updateStats() {
+            const total = ITEMS_DATA.total;
+            const catCount = Object.keys(ITEMS_DATA.categories).length;
+            document.getElementById('totalItems').textContent = total;
+            document.getElementById('categoryCount').textContent = catCount;
+            document.getElementById('lastSync').textContent = new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function getFilteredItems() {
+            const items = [];
+            const search = currentFilter.search.toLowerCase();
+            const cats = currentFilter.category ? [currentFilter.category] : Object.keys(ITEMS_DATA.categories);
+
+            for (const cat of cats) {
+                const catItems = ITEMS_DATA.categories[cat] || {};
+                for (const [code, name] of Object.entries(catItems)) {
+                    if (search && !code.toLowerCase().includes(search) && !name.toLowerCase().includes(search)) continue;
+                    items.push({ code, name, category: cat });
+                }
+            }
+
+            items.sort((a, b) => {
+                if (currentFilter.sort === 'code') return a.code.localeCompare(b.code);
+                if (currentFilter.sort === 'category') return a.category.localeCompare(b.category);
+                return a.name.localeCompare(b.name);
+            });
+
+            return items;
+        }
+
+        function renderItemsList() {
+            currentFilter.sort = document.getElementById('sortSelect').value;
+            const items = getFilteredItems();
+            const grid = document.getElementById('itemsGrid');
+            const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
+            const start = (currentPage - 1) * ITEMS_PER_PAGE;
+            const end = Math.min(start + ITEMS_PER_PAGE, items.length);
+            const pageItems = items.slice(start, end);
+
+            if (items.length === 0) {
+                grid.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="bi bi-inbox fs-1 d-block mb-3"></i><p>没有找到匹配的物品</p></div>';
+                document.getElementById('pageInfo').textContent = '共 0 条';
+                document.getElementById('pageButtons').innerHTML = '';
+                return;
+            }
+
+            grid.innerHTML = pageItems.map(item => `
+                <div class="col-md-3 col-lg-2">
+                    <div class="item-card" onclick="showItemDetail('${escapeHtml(item.code)}', '${escapeHtml(item.name)}', '${item.category}')">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <span class="item-name">${escapeHtml(item.name)}</span>
+                        </div>
+                        <div class="item-code mb-1">${escapeHtml(item.code)}</div>
+                        <span class="badge category-badge bg-secondary">${CATEGORY_LABELS[item.category] || item.category}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('pageInfo').textContent = `显示 ${start + 1} - ${end} 条，共 ${items.length} 条`;
+
+            let pageHtml = '';
+            if (totalPages > 1) {
+                pageHtml = `<button class="btn btn-sm btn-outline-secondary" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i></button>`;
+                const maxPages = 5;
+                let startPage = Math.max(1, currentPage - Math.floor(maxPages / 2));
+                let endPage = Math.min(totalPages, startPage + maxPages - 1);
+                if (endPage - startPage < maxPages - 1) startPage = Math.max(1, endPage - maxPages + 1);
+                for (let i = startPage; i <= endPage; i++) {
+                    pageHtml += `<button class="btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-outline-secondary'}" onclick="goToPage(${i})">${i}</button>`;
+                }
+                pageHtml += `<button class="btn btn-sm btn-outline-secondary" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}><i class="bi bi-chevron-right"></i></button>`;
+            }
+            document.getElementById('pageButtons').innerHTML = pageHtml;
+        }
+
+        function goToPage(page) {
+            const totalPages = Math.ceil(getFilteredItems().length / ITEMS_PER_PAGE);
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderItemsList();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function filterByCategory(category, btn) {
+            currentFilter.category = category;
+            document.querySelectorAll('#categoryTabs .nav-link').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            currentPage = 1;
+            renderItemsList();
+        }
+
+        function debounceSearch() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                currentFilter.search = document.getElementById('searchInput').value.trim();
+                currentPage = 1;
+                renderItemsList();
+            }, 300);
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            currentFilter.search = '';
+            currentFilter.category = '';
+            document.querySelectorAll('#categoryTabs .nav-link').forEach(b => b.classList.remove('active'));
+            document.querySelector('#categoryTabs .nav-link').classList.add('active');
+            currentPage = 1;
+            renderItemsList();
+        }
+
+        function showItemDetail(code, name, category) {
+            const modal = `
+            <div class="modal fade" id="itemDetailModal" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i>物品详情</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <table class="table table-borderless mb-0">
+                                <tr><td class="text-muted" style="width:100px">物品名称</td><td class="fw-bold">${escapeHtml(name)}</td></tr>
+                                <tr><td class="text-muted">物品代码</td><td><code>${escapeHtml(code)}</code></td></tr>
+                                <tr><td class="text-muted">所属分类</td><td><span class="badge bg-secondary">${CATEGORY_LABELS[category] || category}</span></td></tr>
+                            </table>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-outline-primary btn-sm" onclick="copyItemCode('${escapeHtml(code)}')"><i class="bi bi-clipboard me-1"></i>复制代码</button>
+                            <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+            const existing = document.getElementById('itemDetailModal');
+            if (existing) existing.remove();
+            document.body.insertAdjacentHTML('beforeend', modal);
+            new bootstrap.Modal(document.getElementById('itemDetailModal')).show();
+            document.getElementById('itemDetailModal').addEventListener('hidden.bs.modal', function() { this.remove(); });
+        }
+
+        function copyItemCode(code) {
+            navigator.clipboard.writeText(code).then(() => {
+                showToast('已复制: ' + code, 'success');
+            }).catch(() => {
+                showToast('复制失败', 'error');
+            });
+        }
+
+        async function syncItems() {
+            const btn = document.getElementById('btnSync');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner me-1"></span>同步中...';
+
+            try {
+                const formData = new FormData();
+                formData.append('action', 'sync_items');
+
+                const res = await fetch('../../api.php', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data && data.success) {
+                    showToast('同步成功！共 ' + (data.total || 0) + ' 项物品', 'success');
+                    await loadItemsData();
+                } else {
+                    showToast(data?.error || '同步失败', 'error');
+                }
+            } catch (error) {
+                console.error('同步失败:', error);
+                showToast('同步请求失败: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>同步数据';
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const bg = type === 'error' ? 'bg-danger' : type === 'success' ? 'bg-success' : 'bg-primary';
+            const t = document.createElement('div');
+            t.className = `toast align-items-center text-white ${bg} border-0 show`;
+            t.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+            document.getElementById('toastContainer').appendChild(t);
+            setTimeout(() => t.remove(), 3500);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadItemsData();
+        });
+    </script>
+</body>
+</html>

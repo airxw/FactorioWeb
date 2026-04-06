@@ -138,6 +138,7 @@ html, body {
 
 .card-body {
     background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
     padding: 18px !important;
 }
 
@@ -952,6 +953,13 @@ html, body {
 
 .table tbody td {
     border-color: var(--border-dark) !important;
+    color: var(--text-primary) !important;
+    padding: 8px 12px !important;
+}
+
+.table tbody td .badge {
+    color: white !important;
+    font-weight: 600 !important;
 }
 
 .table tbody tr:hover {

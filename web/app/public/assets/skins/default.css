@@ -1,9 +1,9 @@
-/* 默认皮肤样式 */
+/* 默认皮肤样式 - 橙色系 */
 
 :root {
-    --primary: #3b82f6;
-    --primary-dark: #2563eb;
-    --primary-light: #60a5fa;
+    --primary: #f97316;
+    --primary-dark: #ea580c;
+    --primary-light: #fb923c;
     --success: #10b981;
     --success-light: #34d399;
     --danger: #ef4444;
@@ -12,18 +12,18 @@
     --warning-light: #fbbf24;
     --info: #06b6d4;
     --info-light: #22d3ee;
-    --bg-body: #f3f4f6;
+    --bg-body: #fff7ed;
     --bg-sidebar: #ffffff;
     --bg-card: #ffffff;
     --bg-input: #ffffff;
-    --bg-input-border: #e5e7eb;
-    --border-color: #e5e7eb;
-    --text-primary: #374151;
-    --text-secondary: #6b7280;
-    --text-muted: #9ca3af;
+    --bg-input-border: #fed7aa;
+    --border-color: #fed7aa;
+    --text-primary: #431407;
+    --text-secondary: #9a3412;
+    --text-muted: #c2410c;
     --sidebar-width: 480px;
     --border-radius: 12px;
-    --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --box-shadow: 0 2px 8px rgba(249, 115, 22, 0.15);
     --transition: all 0.3s ease;
 }
 
@@ -60,5 +60,5 @@ body {
 }
 
 .log-entry.system {
-    border-left: 4px solid var(--info);
+    border-left: 4px solid var(--danger);
 }

@@ -3,23 +3,34 @@
 namespace Modules\AutoResponder;
 
 use App\Services\RconService;
+use App\Services\StateService;
 
 abstract class AutoResponder
 {
     protected $webDir;
-    protected $settingsFile;
-    protected $stateFile;
     protected $logFile;
     protected $settings;
     protected $state;
     protected $rconConfig;
+    protected ?StateService $stateService = null;
+    private bool $stateServiceAvailable = false;
 
-    public function __construct()
+    public function __construct(?StateService $stateService = null)
     {
         $this->webDir = dirname(__DIR__, 2);
-        $this->settingsFile = dirname($this->webDir) . '/config/state/chatSettings.json';
-        $this->stateFile = dirname($this->webDir) . '/config/state/autoResponderState.json';
         $this->logFile = dirname($this->webDir) . '/logs/autoResponder.log';
+
+        try {
+            if ($stateService) {
+                $this->stateService = $stateService;
+            } else {
+                $this->stateService = new StateService();
+            }
+            $this->stateServiceAvailable = true;
+        } catch (\Exception $e) {
+            $this->logWarning("StateService 初始化失败，将使用文件模式降级运行: " . $e->getMessage());
+            $this->stateServiceAvailable = false;
+        }
 
         $this->loadSettings();
         $this->loadState();
@@ -28,9 +39,31 @@ abstract class AutoResponder
 
     protected function loadSettings(): void
     {
-        if (file_exists($this->settingsFile)) {
-            $content = file_get_contents($this->settingsFile);
-            $this->settings = json_decode($content, true) ?? [];
+        if ($this->stateServiceAvailable && $this->stateService) {
+            try {
+                $data = $this->stateService->loadState('chatSettings');
+                if (!empty($data)) {
+                    $this->settings = $data;
+                    return;
+                }
+                $this->logInfo("从数据库加载 chatSettings 为空，使用默认设置");
+            } catch (\Exception $e) {
+                $this->logError("StateService 加载 chatSettings 失败: " . $e->getMessage() . "\n堆栈: " . $e->getTraceAsString());
+            }
+        }
+
+        $fallbackFile = dirname($this->webDir) . '/config/state/chatSettings.json';
+        if (file_exists($fallbackFile)) {
+            try {
+                $content = file_get_contents($fallbackFile);
+                $this->settings = json_decode($content, true) ?? [];
+                if ($this->stateServiceAvailable) {
+                    $this->logWarning("已从文件回退加载 chatSettings");
+                }
+            } catch (\Exception $e) {
+                $this->logError("文件回退加载 chatSettings 失败: " . $e->getMessage());
+                $this->settings = $this->getDefaultSettings();
+            }
         } else {
             $this->settings = $this->getDefaultSettings();
         }
@@ -38,9 +71,28 @@ abstract class AutoResponder
 
     protected function loadState(): void
     {
-        if (file_exists($this->stateFile)) {
-            $content = file_get_contents($this->stateFile);
-            $this->state = json_decode($content, true) ?? [];
+        if ($this->stateServiceAvailable && $this->stateService) {
+            try {
+                $data = $this->stateService->loadState('autoResponderState');
+                $this->state = !empty($data) ? $data : [];
+                return;
+            } catch (\Exception $e) {
+                $this->logError("StateService 加载 autoResponderState 失败: " . $e->getMessage() . "\n堆栈: " . $e->getTraceAsString());
+            }
+        }
+
+        $fallbackFile = dirname($this->webDir) . '/config/state/autoResponderState.json';
+        if (file_exists($fallbackFile)) {
+            try {
+                $content = file_get_contents($fallbackFile);
+                $this->state = json_decode($content, true) ?? [];
+                if ($this->stateServiceAvailable) {
+                    $this->logWarning("已从文件回退加载 autoResponderState");
+                }
+            } catch (\Exception $e) {
+                $this->logError("文件回退加载 autoResponderState 失败: " . $e->getMessage());
+                $this->state = [];
+            }
         } else {
             $this->state = [];
         }
@@ -58,11 +110,60 @@ abstract class AutoResponder
 
     protected function saveState(): void
     {
-        $dir = dirname($this->stateFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        if ($this->stateServiceAvailable && $this->stateService) {
+            try {
+                $success = $this->stateService->saveState('autoResponderState', $this->state);
+                if ($success) {
+                    return;
+                }
+                $this->logWarning("StateService 保存 autoResponderState 失败，尝试文件回退");
+            } catch (\Exception $e) {
+                $this->logError("StateService 保存 autoResponderState 异常: " . $e->getMessage() . "\n堆栈: " . $e->getTraceAsString());
+            }
         }
-        file_put_contents($this->stateFile, json_encode($this->state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        $fallbackFile = dirname($this->webDir) . '/config/state/autoResponderState.json';
+        try {
+            $dir = dirname($fallbackFile);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            file_put_contents($fallbackFile, json_encode($this->state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            if ($this->stateServiceAvailable) {
+                $this->logWarning("已回退到文件保存 autoResponderState");
+            }
+        } catch (\Exception $e) {
+            $this->logError("文件回退保存 autoResponderState 失败: " . $e->getMessage());
+        }
+    }
+
+    protected function saveSettings(): void
+    {
+        if ($this->stateServiceAvailable && $this->stateService) {
+            try {
+                $success = $this->stateService->saveState('chatSettings', $this->settings);
+                if ($success) {
+                    return;
+                }
+                $this->logWarning("StateService 保存 chatSettings 失败，尝试文件回退");
+            } catch (\Exception $e) {
+                $this->logError("StateService 保存 chatSettings 异常: " . $e->getMessage() . "\n堆栈: " . $e->getTraceAsString());
+            }
+        }
+
+        $fallbackFile = dirname($this->webDir) . '/config/state/chatSettings.json';
+        try {
+            $dir = dirname($fallbackFile);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            file_put_contents($fallbackFile, json_encode($this->settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            if ($this->stateServiceAvailable) {
+                $this->logWarning("已回退到文件保存 chatSettings");
+            }
+        } catch (\Exception $e) {
+            $this->logError("文件回退保存 chatSettings 失败: " . $e->getMessage());
+        }
     }
 
     protected function getSettings(): array

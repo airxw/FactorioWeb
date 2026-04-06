@@ -3,9 +3,9 @@
 }
 
 :root {
-    --primary: #3b82f6;
-    --primary-dark: #2563eb;
-    --primary-light: #60a5fa;
+    --primary: #f97316;
+    --primary-dark: #ea580c;
+    --primary-light: #fb923c;
     --success: #10b981;
     --success-light: #34d399;
     --danger: #ef4444;
@@ -14,28 +14,28 @@
     --warning-light: #fbbf24;
     --info: #06b6d4;
     --info-light: #22d3ee;
-    --bg-body: #0f172a;
-    --bg-sidebar: #1e293b;
-    --bg-card: #1e293b;
-    --bg-input: #334155;
-    --bg-input-border: #475569 !important;
-    --border-color: #475569;
-    --border-dark: #334155;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --accent-blue: #3b82f6;
+    --bg-body: #1a1207;
+    --bg-sidebar: #2d1808;
+    --bg-card: #2d1808;
+    --bg-input: #431407;
+    --bg-input-border: #9a3412 !important;
+    --border-color: #9a3412;
+    --border-dark: #431407;
+    --text-primary: #fed7aa;
+    --text-secondary: #fb923c;
+    --text-muted: #f97316;
+    --accent-orange: #f97316;
     --accent-green: #10b981;
     --accent-red: #ef4444;
     --panel-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    --glow-primary: 0 0 20px rgba(59, 130, 246, 0.3);
+    --glow-primary: 0 0 20px rgba(249, 115, 22, 0.3);
     --glow-success: 0 0 20px rgba(16, 185, 129, 0.3);
     --glow-danger: 0 0 20px rgba(239, 68, 68, 0.3);
-    --login-card-bg: #1e293b !important;
-    --bg-gradient: linear-gradient(135deg, #0f172a 0%, #020617 100%) !important;
-    --input-border: #475569 !important;
-    --input-bg: #334155 !important;
-    --input-label: #94a3b8 !important;
+    --login-card-bg: #2d1808 !important;
+    --bg-gradient: linear-gradient(135deg, #431407 0%, #2d1808 100%) !important;
+    --input-border: #9a3412 !important;
+    --input-bg: #431407 !important;
+    --input-label: #fb923c !important;
 }
 
 html, body {
@@ -233,9 +233,9 @@ html, body {
 
 .form-control:focus, .form-select:focus {
     border-color: var(--primary) !important;
-    background: #1e293b !important;
+    background: #2d1808 !important;
     color: var(--text-primary) !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15) !important;
 }
 
 .form-control::placeholder {
@@ -347,7 +347,7 @@ html, body {
 
 .item-btn:hover {
     border-color: var(--primary) !important;
-    background: rgba(59, 130, 246, 0.1) !important;
+    background: rgba(249, 115, 22, 0.1) !important;
     box-shadow: var(--glow-primary) !important;
     transform: translateY(-1px) !important;
 }
@@ -377,7 +377,7 @@ html, body {
 }
 
 .accordion-button:not(.collapsed) {
-    background: rgba(59, 130, 246, 0.1) !important;
+    background: rgba(249, 115, 22, 0.1) !important;
     color: var(--primary-light) !important;
 }
 
@@ -479,7 +479,7 @@ html, body {
 }
 
 .badge.bg-primary {
-    background: rgba(59, 130, 246, 0.2) !important;
+    background: rgba(249, 115, 22, 0.2) !important;
     color: var(--primary-light) !important;
 }
 
@@ -785,7 +785,7 @@ html, body {
 }
 
 .dropdown-item:hover {
-    background: rgba(59, 130, 246, 0.1) !important;
+    background: rgba(249, 115, 22, 0.1) !important;
     color: var(--primary-light) !important;
 }
 

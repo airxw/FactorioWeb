@@ -92,7 +92,7 @@ async function apiCall(action, form = null, qs = '') {
     const fd = (form instanceof FormData) ? form : new FormData();
     if (!fd.has('action')) fd.append('action', action);
     try {
-        const res = await fetch('api.php' + (qs || ''), {
+        const res = await fetch('/app/api.php' + (qs || ''), {
             method: 'POST',
             body: fd
         });
@@ -130,11 +130,25 @@ const fmtBytes = window.__ui.fmtBytes;
 const fetchJson = window.__api.fetchJson;
 
 let probeTimer = null;
-const POLL_INTERVAL = 2000;
+const POLL_INTERVAL = 10000;
 
 function initProbe() {
+    // 立即执行一次状态检查，确保初始显示正确
+    updateProbe().catch((err) => {
+        console.warn('[initProbe] initial probe failed, showing start form as fallback');
+        // 如果API调用失败，默认显示启动表单
+        const stopArea = document.getElementById('stop-area');
+        const startForm = document.getElementById('startForm');
+        const badge = document.getElementById('server-status-badge');
+
+        if (stopArea) stopArea.classList.add('d-none');
+        if (startForm) startForm.classList.remove('d-none');
+        if (badge) {
+            badge.className = 'badge bg-secondary';
+            badge.innerHTML = '<i class="bi bi-circle me-1"></i>已停止';
+        }
+    });
     startProbe();
-    updateProbe().catch(()=>{});
 }
 
 function startProbe() {
@@ -149,32 +163,66 @@ function stopProbe() {
 
 async function updateProbe() {
     try {
-        const d = await fetchJson('tz.php');
-        // CPU
+        const d = await fetchJson('/app/tz.php');
+        
+        // CPU - 安全地更新（如果元素存在）
         const cpuPct = d.cpu_usage ?? 0;
-        smoothWidth($('#yh-cpu-bar'), cpuPct);
-        $('#yh-cpu-txt').innerText = cpuPct + '%';
-        $('#yh-cpu-model').innerText = `(${d.cpu_name || ''})`;
-        // Mem
+        const cpuBar = $('#yh-cpu-bar');
+        const cpuTxt = $('#yh-cpu-txt');
+        const cpuModel = $('#yh-cpu-model');
+        if (cpuBar) smoothWidth(cpuBar, cpuPct);
+        if (cpuTxt) cpuTxt.innerText = cpuPct + '%';
+        if (cpuModel) cpuModel.innerText = `(${d.cpu_name || ''})`;
+        
+        // Mem - 安全地更新
         const m = d.mem || {};
         const total = m.total || 1;
-        smoothWidth($('#yh-mem-real'), (m.real_used||0)/total*100);
-        smoothWidth($('#yh-mem-buf'), (m.buffers||0)/total*100);
-        smoothWidth($('#yh-mem-cache'), (m.cached||0)/total*100);
-        $('#yh-mem-txt').innerText = `${Math.round((m.real_used||0)/1024/1024)} MB`;
-        // Load, disk, net
-        $('#yh-load').innerText = (d.load || []).join(' ');
-        smoothWidth($('#yh-disk-bar'), d.disk ? d.disk.percent : 0);
-        $('#yh-disk-txt').innerText = d.disk ? `${d.disk.percent}%` : '--';
-        $('#yh-net-rx').innerText = fmtBytes(d.net?.rx || 0);
-        $('#yh-net-tx').innerText = fmtBytes(d.net?.tx || 0);
-        $('#yh-os').innerText = d.os || 'Linux';
-        $('#sys-uptime').innerText = `运行: ${fmtUptime(d.uptime)}`;
-        // app status
-        updateAppStatus(Boolean(d.app_running));
+        const memReal = $('#yh-mem-real');
+        const memBuf = $('#yh-mem-buf');
+        const memCache = $('#yh-mem-cache');
+        const memTxt = $('#yh-mem-txt');
+        if (memReal) smoothWidth(memReal, (m.real_used||0)/total*100);
+        if (memBuf) smoothWidth(memBuf, (m.buffers||0)/total*100);
+        if (memCache) smoothWidth(memCache, (m.cached||0)/total*100);
+        if (memTxt) memTxt.innerText = `${Math.round((m.real_used||0)/1024/1024)} MB`;
+        
+        // Load, disk, net - 安全地更新
+        const loadEl = $('#yh-load');
+        const diskBar = $('#yh-disk-bar');
+        const diskTxt = $('#yh-disk-txt');
+        const netRx = $('#yh-net-rx');
+        const netTx = $('#yh-net-tx');
+        const osEl = $('#yh-os');
+        const uptimeEl = $('#sys-uptime');
+        
+        if (loadEl) loadEl.innerText = (d.load || []).join(' ');
+        if (diskBar) smoothWidth(diskBar, d.disk ? d.disk.percent : 0);
+        if (diskTxt) diskTxt.innerText = d.disk ? `${d.disk.percent}%` : '--';
+        if (netRx) netRx.innerText = fmtBytes(d.net?.rx || 0);
+        if (netTx) netTx.innerText = fmtBytes(d.net?.tx || 0);
+        if (osEl) osEl.innerText = d.os || 'Linux';
+        if (uptimeEl) uptimeEl.innerText = `运行: ${fmtUptime(d.uptime)}`;
+        
+        // app status + rcon - 这是最重要的，必须执行！
+        updateAppStatus(Boolean(d.app_running), Boolean(d.rcon_connected));
     } catch (err) {
-        // silently ignore frequent probe errors
-        // console.warn('probe error', err);
+        console.error('[updateProbe] error:', err);
+        
+        // 即使前面出错，也尝试显示启动表单
+        try {
+            const stopArea = document.getElementById('stop-area');
+            const startForm = document.getElementById('startForm');
+            const badge = document.getElementById('server-status-badge');
+            
+            if (stopArea) stopArea.classList.add('d-none');
+            if (startForm) startForm.classList.remove('d-none');
+            if (badge) {
+                badge.className = 'badge bg-secondary';
+                badge.innerHTML = '<i class="bi bi-circle me-1"></i>已停止';
+            }
+        } catch(fallbackErr) {
+            console.error('[updateProbe] fallback error:', fallbackErr);
+        }
     }
 }
 
@@ -183,20 +231,51 @@ function fmtUptime(s=0) {
     return `${d}d ${h}h ${m}m`;
 }
 
-function updateAppStatus(running) {
-    const b = $('#server-status-badge');
-    if (!b) return;
-    const textEl = b.querySelector('span');
-    if (running) {
-        b.className = 'status-badge online';
-        if (textEl) textEl.innerText = '运行中';
-        $('#stop-area')?.classList.remove('d-none');
-        $('#startForm')?.classList.add('d-none');
-    } else {
-        b.className = 'status-badge offline';
-        if (textEl) textEl.innerText = '已停止';
-        $('#stop-area')?.classList.add('d-none');
-        $('#startForm')?.classList.remove('d-none');
+function updateAppStatus(running, connected) {
+    try {
+        const b = document.getElementById('server-status-badge');
+        if (!b) {
+            console.warn('[updateAppStatus] server-status-badge not found');
+            return;
+        }
+
+        const stopArea = document.getElementById('stop-area');
+        const startForm = document.getElementById('startForm');
+
+        if (running) {
+            b.className = 'badge bg-success';
+            b.innerHTML = '<i class="bi bi-circle-fill me-1"></i>运行中';
+
+            if (stopArea) stopArea.classList.remove('d-none');
+            else console.warn('[updateAppStatus] stop-area not found');
+
+            if (startForm) startForm.classList.add('d-none');
+            else console.warn('[updateAppStatus] startForm not found');
+        } else {
+            b.className = 'badge bg-secondary';
+            b.innerHTML = '<i class="bi bi-circle me-1"></i>已停止';
+
+            if (stopArea) stopArea.classList.add('d-none');
+            else console.warn('[updateAppStatus] stop-area not found');
+
+            if (startForm) startForm.classList.remove('d-none');
+            else console.warn('[updateAppStatus] startForm not found');
+        }
+
+        const rb = document.getElementById('rcon-status-badge');
+        if (rb) {
+            if (connected) {
+                rb.className = 'badge bg-success';
+                rb.innerHTML = '<i class="bi bi-wifi me-1"></i>RCON: 已连接';
+            } else {
+                rb.className = 'badge bg-secondary';
+                rb.innerHTML = '<i class="bi bi-wifi-off me-1"></i>RCON: 未连接';
+            }
+        }
+
+        console.log(`[updateAppStatus] running=${running}, connected=${connected}`);
+    } catch(err) {
+        console.error('[updateAppStatus] error:', err);
     }
 }
 
@@ -221,31 +300,28 @@ let reconnectTimer = null;
 const RECONNECT_DELAY = 3000;
 
 function initTerminal() {
-    // create terminal
-    try {
-        term = new Terminal({
-            fontSize: 13,
-            fontFamily: 'Consolas,Monaco,monospace',
-            theme: { background: '#1e1e1e' },
-            cursorBlink: true,
-            disableStdin: true,
-            rows: 15,
-            convertEol: true
-        });
-        // FitAddon class is provided by xterm-addon-fit.js global FitAddon
-        fitAddon = new FitAddon.FitAddon();
-        term.loadAddon(fitAddon);
-        const termDiv = document.getElementById('terminal');
-        term.open(termDiv);
-        window.addEventListener('resize', ()=> { try { fitAddon.fit(); } catch(e){} });
-        setTimeout(()=>{ try { fitAddon.fit(); } catch(e){} }, 300);
-    } catch (err) {
-        console.warn('xterm init fail', err);
+    const termDiv = document.getElementById('terminal');
+    if (!termDiv) return;
+
+    termDiv.innerHTML = `
+        <div style="padding:20px;text-align:center;color:#8b949e;background:#161b22;border-radius:6px;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+            <div style="font-size:15px;font-weight:600;color:#e6edf3;margin-bottom:8px;">已切换至 RCON 控制台</div>
+            <div style="font-size:13px;color:#8b949e;line-height:1.6;max-width:400px;">
+                WebSocket 终端已禁用<br>
+                请使用 RCON 控制台进行服务器管理
+            </div>
+        </div>
+    `;
+
+    const badge = $id('ws-badge');
+    if (badge) {
+        badge.innerText = 'RCON 模式';
+        badge.className = 'badge bg-info me-3';
     }
-    connectWs();
-    // bind clear button
-    const clearBtn = document.querySelector('.term-header button');
-    if (clearBtn) clearBtn.addEventListener('click', ()=>term.clear());
 }
 
 function connectWs() {
@@ -259,8 +335,8 @@ function connectWs() {
         return;
     }
     ws.onopen = () => {
-        $id('ws-badge').innerText = '已连接';
-        $id('ws-badge').className = 'badge bg-success me-3';
+        const badge = $id('ws-badge');
+        if (badge) { badge.innerText = '已连接'; badge.className = 'badge bg-success me-3'; }
         try { fitAddon.fit(); } catch(e){}
     };
     ws.onmessage = (e) => {
@@ -268,8 +344,8 @@ function connectWs() {
     };
     ws.onclose = () => {
         ws = null;
-        $id('ws-badge').innerText = '断开连接';
-        $id('ws-badge').className = 'badge bg-danger me-3';
+        const badge = $id('ws-badge');
+        if (badge) { badge.innerText = '断开连接'; badge.className = 'badge bg-danger me-3'; }
         scheduleReconnect();
     };
     ws.onerror = () => {
@@ -286,11 +362,7 @@ function scheduleReconnect() {
 }
 
 function sendConsoleCmd(cmd) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(cmd);
-    } else {
-        showToast('控制台尚未连接', 'error');
-    }
+    showToast('请使用 RCON 控制台发送命令', 'info');
 }
 
 window.__terminal = {
@@ -314,7 +386,7 @@ async function loadMods() {
     if (!el) return;
     el.innerHTML = `<div class="text-center p-3 text-muted">加载中...</div>`;
     try {
-        const res = await fetch('api.php?action=mod_list');
+        const res = await fetch('/app/api.php?action=mod_list');
         const d = await res.json();
         el.innerHTML = '';
         if (!d.mods || !d.mods.length) {
@@ -428,11 +500,32 @@ const apiCall = window.__api.apiCall;
 
 async function loadPlayerLists() {
     try {
-        const r = await fetch('api.php?action=player_lists');
+        const r = await fetch('/app/api.php?action=player_lists');
         const d = await r.json();
         fill('list-admins', d.admins);
         fill('list-bans', d.bans);
         fill('list-whitelist', d.whitelist);
+    } catch (e) {
+        // ignore
+    }
+}
+
+async function loadKnownPlayers() {
+    try {
+        const r = await fetch('/app/api.php?action=known_players');
+        const d = await r.json();
+        const el = document.getElementById('known-players-list');
+        if (!el) return;
+        if (!d.success || !d.players || d.players.length === 0) {
+            el.innerHTML = '<div class="text-center text-muted small p-3">暂无玩家数据，等待玩家登录...</div>';
+            return;
+        }
+        el.innerHTML = d.players.map(p => {
+            return `<button class="list-group-item list-group-item-action py-1" data-player="${p}">${p}</button>`;
+        }).join('');
+        el.querySelectorAll('button[data-player]').forEach(b => b.addEventListener('click', ()=>{
+            document.getElementById('target-player').value = b.dataset.player;
+        }));
     } catch (e) {
         // ignore
     }
@@ -480,7 +573,7 @@ function doGift() {
 }
 
 window.__players = {
-    loadPlayerLists, doAction, doGift
+    loadPlayerLists, loadKnownPlayers, doAction, doGift
 };
 
 })(); // end players
@@ -496,7 +589,7 @@ const apiCall = window.__api.apiCall;
 
 async function loadDropdown(type, id) {
     try {
-        const r = await fetch(`api.php?action=files&type=${encodeURIComponent(type)}`);
+        const r = await fetch(`/app/api.php?action=files&type=${encodeURIComponent(type)}`);
         const d = await r.json();
         const s = document.getElementById(id);
         if(!s) return;
@@ -518,7 +611,7 @@ async function loadDropdown(type, id) {
 
 async function loadFiles(type, id) {
     try {
-        const r = await fetch(`api.php?action=files&type=${encodeURIComponent(type)}`);
+        const r = await fetch(`/app/api.php?action=files&type=${encodeURIComponent(type)}`);
         const d = await r.json();
         const el = document.getElementById(id);
         if(!el) return;
@@ -595,7 +688,7 @@ window.__files = {
 (function(){
 const $ = window.__ui.$id;
 const showToast = window.__ui.showToast;
-const fetchJson = window.__api.fetchJson;
+const apiCall = window.__api.apiCall;
 
 let ITEMS = {
     logistics: {},
@@ -610,33 +703,54 @@ let ITEMS = {
 // 加载物品数据
 async function loadItems() {
     try {
-        const data = await fetchJson('../../../config/game/items.json');
-        ITEMS = data;
+        const data = await apiCall('get_items');
+        if (data && data.success && data.categories) {
+            ITEMS = data.categories;
+            window.__itemTotal = data.total || 0;
+            updateItemStatus();
+        }
     } catch (error) {
         console.error('加载物品数据失败:', error);
     }
 }
 
-function renderItems(cat='logistics') {
+function renderItems(cat='logistics', clickedBtn) {
     const grid = document.getElementById('item-grid');
     if (!grid) return;
-    grid.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    const list = ITEMS[cat] || {};
-    Object.entries(list).forEach(([code, name])=>{
-        const b = document.createElement('button');
-        b.className = 'btn btn-outline-secondary item-btn h-100';
-        b.innerHTML = `<div class="fw-bold small">${name}</div><div class="text-muted small font-monospace">${code}</div>`;
-        b.addEventListener('click', ()=>{
-            document.getElementById('gift-item').value = code;
-            const modalEl = document.getElementById('itemModal');
-            const bsModal = bootstrap.Modal.getInstance(modalEl);
-            if (bsModal) bsModal.hide();
-            showToast(`已选择 ${name}`, 'success', 1200);
-        });
-        frag.appendChild(b);
-    });
-    grid.appendChild(frag);
+    
+    grid.innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>加载中...</div>';
+    
+    setTimeout(async () => {
+        try {
+            const url = '/app/api.php?action=get_items' + (cat ? '&category=' + encodeURIComponent(cat) : '');
+            const data = await fetchJson(url);
+            const list = (data && data.success && data.categories) ? (data.categories[cat] || {}) : (ITEMS[cat] || {});
+            
+            grid.innerHTML = '';
+            const frag = document.createDocumentFragment();
+            Object.entries(list).forEach(([code, name])=>{
+                const b = document.createElement('button');
+                b.className = 'btn btn-outline-secondary item-btn h-100';
+                b.innerHTML = `<div class="fw-bold small">${name}</div><div class="text-muted small font-monospace">${code}</div>`;
+                b.addEventListener('click', ()=>{
+                    document.getElementById('gift-item').value = code;
+                    const modalEl = document.getElementById('itemModal');
+                    const bsModal = bootstrap.Modal.getInstance(modalEl);
+                    if (bsModal) bsModal.hide();
+                    showToast(`已选择 ${name}`, 'success', 1200);
+                });
+                frag.appendChild(b);
+            });
+            grid.appendChild(frag);
+            
+            if (clickedBtn) {
+                document.querySelectorAll('#itemTabs .nav-link').forEach(b => b.classList.remove('active'));
+                clickedBtn.classList.add('active');
+            }
+        } catch(e) {
+            grid.innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
+        }
+    }, 50);
 }
 
 function filterItems(q='') {
@@ -664,11 +778,38 @@ function filterItems(q='') {
     grid.appendChild(frag);
 }
 
+async function syncItemLibrary() {
+    const btn = document.getElementById('btn-sync-items');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>同步中...'; }
+    try {
+        const res = await apiCall('sync_items', {}, 'POST');
+        if (res && res.success) {
+            showToast(`同步成功！共 ${res.total || 0} 项物品`, 'success');
+            await loadItems();
+            updateItemStatus();
+        } else {
+            showToast(res?.error || '同步失败', 'error');
+        }
+    } catch(e) {
+        showToast('同步请求失败: ' + e.message, 'error');
+    }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>同步物品库'; }
+}
+
+function updateItemStatus() {
+    const el = document.getElementById('item-status-info');
+    if (!el) return;
+    const total = window.__itemTotal || Object.values(ITEMS).reduce((s, c) => s + Object.keys(c).length, 0);
+    el.textContent = `共 ${total} 项物品`;
+}
+
 window.__items = {
     ITEMS,
     loadItems,
     renderItems,
-    filterItems
+    filterItems,
+    syncItemLibrary,
+    updateItemStatus
 };
 
 })(); // end items
@@ -689,7 +830,7 @@ async function checkUpdate() {
     const ve = document.getElementById('ver-exp');
     if (vs) vs.innerText = '...'; if (ve) ve.innerText = '...';
     try {
-        const d = await fetchJson('api.php?action=update_check');
+        const d = await fetchJson('/app/api.php?action=update_check');
         if (vs) vs.innerText = d.stable || '—';
         if (ve) ve.innerText = d.experimental || '—';
     } catch (e) {
@@ -715,7 +856,7 @@ async function installVer(v) {
 
 async function loadLocalVersions() {
     try {
-        const r = await fetch('api.php?action=get_versions');
+        const r = await fetch('/app/api.php?action=get_versions');
         const d = await r.json();
         const s = document.getElementById('version-select');
         if (!s) return;
@@ -756,6 +897,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     try { window.__probe.initProbe(); } catch(e){}
     try { window.__mods.loadMods(); } catch(e){}
     try { window.__players.loadPlayerLists(); } catch(e){}
+    try { window.__players.loadKnownPlayers(); } catch(e){}
     try { window.__files.loadAllFiles(); } catch(e){}
     try { window.__files.loadDropdown('map','map-select'); } catch(e){}
     try { window.__files.loadDropdown('config','config-select'); } catch(e){}
@@ -765,13 +907,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
     document.querySelector('button[data-bs-target="#tab-mods"]')
         ?.addEventListener('shown.bs.tab', ()=>{ window.__mods.loadMods(); });
     document.querySelector('button[data-bs-target="#tab-players"]')
-        ?.addEventListener('shown.bs.tab', ()=>{ window.__players.loadPlayerLists(); });
+        ?.addEventListener('shown.bs.tab', ()=>{ window.__players.loadPlayerLists(); window.__players.loadKnownPlayers(); });
 
     // 加载物品数据
     window.__items.loadItems();
     
     // item modal render
-    document.getElementById('itemModal')?.addEventListener('shown.bs.modal', ()=>{ window.__items.renderItems('logistics'); });
+    document.getElementById('itemModal')?.addEventListener('shown.bs.modal', ()=>{
+        window.__items.renderItems('logistics');
+        const syncBtn = document.getElementById('btn-sync-items');
+        if (syncBtn && window.__currentUserRole === 'admin') { syncBtn.classList.remove('d-none'); }
+    });
 
     // Event delegation for data-action
     document.addEventListener('click', (e)=>{
@@ -829,7 +975,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
                     updateAppStatus(true);
                     // 立即刷新服务器状态
                     setTimeout(() => {
-                        fetch('api.php?action=rcon_status&server=default')
+                        fetch('/app/api.php?action=rcon_status&server=default')
                             .then(res => res.json())
                             .then(data => {
                                 const statusBadge = document.getElementById('current-server-status');
@@ -872,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
                     return;
                 }
                 resultsHolder.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary"></div></div>';
-                fetch(`api.php?action=mod_portal_search&q=${encodeURIComponent(q)}`).then(r=>r.json()).then(data=>{
+                fetch(`/app/api.php?action=mod_portal_search&q=${encodeURIComponent(q)}`).then(r=>r.json()).then(data=>{
                     resultsHolder.innerHTML = '';
                     if (!data.results || data.results.length === 0) {
                         resultsHolder.innerHTML = '<div class="text-center text-muted">未找到 Mod</div>';
